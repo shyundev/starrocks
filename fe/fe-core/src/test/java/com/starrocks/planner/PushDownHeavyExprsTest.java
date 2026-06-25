@@ -155,4 +155,42 @@ public class PushDownHeavyExprsTest {
                 "          <slot 12> : regexp_replace(get_json_object(7: field_text_1, '$.key_json_2'), " +
                 "'^\\\\[\\\\\"|\\\\\"]$', '')\n"), plan);
     }
+
+    @Test
+    public void testHeavyExprReferencingHeavyCommonSubExpr() throws Exception {
+        String q = "SELECT regexp_count(field_varchar_1, 'a') + regexp_count(field_varchar_1, 'b') AS x, " +
+                "regexp_count(field_varchar_1, 'b') AS y " +
+                "FROM tbl_transaction_001";
+        String plan = UtFrameUtils.getFragmentPlan(ctx, q);
+        Assertions.assertFalse(plan.contains("heavy exprs"), plan);
+        Assertions.assertTrue(plan.contains("<slot 8> : regexp_count(4: field_varchar_1, 'a') + 10: regexp_count"),
+                plan);
+        Assertions.assertTrue(plan.contains("<slot 10> : regexp_count(4: field_varchar_1, 'b')"), plan);
+    }
+
+    @Test
+    public void testNestedHeavyCommonSubExprReuse() throws Exception {
+        String q = "SELECT regexp_replace(regexp_replace(field_varchar_1, '[A-Z]', ''), '[0-9]', '') AS a, " +
+                "regexp_replace(regexp_replace(field_varchar_1, '[A-Z]', ''), '[0-9]', '') AS b, " +
+                "regexp_replace(field_varchar_1, '[A-Z]', '') AS c, " +
+                "regexp_replace(field_varchar_1, '[A-Z]', '') AS d " +
+                "FROM tbl_transaction_001";
+        String plan = UtFrameUtils.getFragmentPlan(ctx, q);
+        Assertions.assertFalse(plan.contains("heavy exprs"), plan);
+        Assertions.assertTrue(plan.contains("regexp_replace(4: field_varchar_1, '[A-Z]', '')"), plan);
+        Assertions.assertFalse(plan.contains("regexp_replace(regexp_replace("), plan);
+    }
+
+    @Test
+    public void testHeavyExprReferencingHeavyCommonSubExprThroughLightCommonSubExpr() throws Exception {
+        String q = "SELECT regexp_count(substr(regexp_replace(field_varchar_1, '[0-9]', ''), 1, 3), 'a') AS p, " +
+                "regexp_count(substr(regexp_replace(field_varchar_1, '[0-9]', ''), 1, 3), 'b') AS q, " +
+                "substr(regexp_replace(field_varchar_1, '[0-9]', ''), 1, 3) AS r, " +
+                "regexp_replace(field_varchar_1, '[0-9]', '') AS w " +
+                "FROM tbl_transaction_001";
+        String plan = UtFrameUtils.getFragmentPlan(ctx, q);
+        Assertions.assertFalse(plan.contains("heavy exprs"), plan);
+        Assertions.assertTrue(plan.contains("<slot 12> : regexp_replace(4: field_varchar_1, '[0-9]', '')"), plan);
+        Assertions.assertTrue(plan.contains("<slot 13> : substr(12: regexp_replace, 1, 3)"), plan);
+    }
 }
