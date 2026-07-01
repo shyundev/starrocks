@@ -112,6 +112,35 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testHiveCatalogTableNameIsCaseInsensitive(@Mocked IcebergCatalog icebergCatalog) {
+        Table nativeTable = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                icebergCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+
+                icebergCatalog.getTable((ConnectContext) any, anyString, anyString);
+                result = nativeTable;
+                minTimes = 0;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        cachingIcebergCatalog.getTable(connectContext, "DB", "Foo");
+
+        new Verifications() {
+            {
+                // Hive/Glue table names are folded to lower case before reaching the delegate and the cache key,
+                // so a table is cached under a single name regardless of the case used to query it
+                icebergCatalog.getTable((ConnectContext) any, "db", "foo");
+                minTimes = 1;
+            }
+        };
+    }
+
+    @Test
     public void testListPartitionNames(@Mocked IcebergCatalog icebergCatalog) {
         PartitionSpec spec = Mockito.mock(PartitionSpec.class);
         Mockito.when(spec.isUnpartitioned()).thenReturn(false);

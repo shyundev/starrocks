@@ -259,8 +259,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.listTables(connectContext, dbName);
     }
 
+    // Hive/Glue catalogs match names case-insensitively; normalize to lower case so the metadata
+    // cache keys a table under a single name regardless of the case used to query it
+    private String normalizeCacheName(String name) {
+        IcebergCatalogType type = delegate.getIcebergCatalogType();
+        return name != null && (type == IcebergCatalogType.HIVE_CATALOG || type == IcebergCatalogType.GLUE_CATALOG)
+                ? name.toLowerCase() : name;
+    }
+
     @Override
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
+        dbName = normalizeCacheName(dbName);
+        tableName = normalizeCacheName(tableName);
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
         // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
@@ -389,6 +399,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+        dbName = normalizeCacheName(dbName);
+        tableName = normalizeCacheName(tableName);
         String lockKey = dbName.toLowerCase(Locale.ROOT) + "." + tableName.toLowerCase(Locale.ROOT);
         tableRefreshLockMap.putIfAbsent(lockKey, lockKey);
         String lock = tableRefreshLockMap.get(lockKey);
@@ -504,18 +516,24 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public void invalidatePartitionCache(String dbName, String tableName) {
         // will invalidate all snapshots of this table
+        dbName = normalizeCacheName(dbName);
+        tableName = normalizeCacheName(tableName);
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         partitionCache.invalidate(key);
     }
 
     @Override
     public void invalidateTableCache(String dbName, String tableName) {
+        dbName = normalizeCacheName(dbName);
+        tableName = normalizeCacheName(tableName);
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         tables.invalidate(key);
     }
 
     @Override
     public void invalidateCache(String dbName, String tableName) {
+        dbName = normalizeCacheName(dbName);
+        tableName = normalizeCacheName(tableName);
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);
     }
