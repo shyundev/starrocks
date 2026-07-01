@@ -1572,8 +1572,8 @@ public class QueryAnalyzer {
             boolean isRelationAliasCaseInSensitive = false;
             if (ConnectContext.get() != null) {
                 isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
-                // For hive view, relation alias is case-insensitive
-                if (node.getView().isHiveView()) {
+                // For connector view (hive/iceberg/paimon), relation alias is case-insensitive
+                if (node.getView().isConnectorView()) {
                     ConnectContext.get().setRelationAliasCaseInSensitive(true);
                 }
             }
@@ -1584,7 +1584,7 @@ public class QueryAnalyzer {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             } finally {
-                if (ConnectContext.get() != null && node.getView().isHiveView()) {
+                if (ConnectContext.get() != null && node.getView().isConnectorView()) {
                     ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
                 }
             }
