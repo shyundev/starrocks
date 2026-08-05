@@ -201,4 +201,54 @@ public class SlotTrackerTest {
         waitTime = slotTracker.getEarliestQueryWaitTimeSecond();
         assertThat(waitTime).isEqualTo(0.0);
     }
+
+    @Test
+    public void testPeakExpiredSlotsWithDifferentQueryTimeout() {
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
+
+        long nowMs = System.currentTimeMillis();
+        // The slot with a long query_timeout has the earliest pending deadline but is not expired yet.
+        LogicalSlot longQuerySlot = generateSlot(nowMs - 10_000, nowMs + 600_000);
+        LogicalSlot shortQuerySlot = generateSlot(nowMs - 5_000, nowMs - 1_000);
+        LogicalSlot shorterQuerySlot = generateSlot(nowMs - 3_000, nowMs - 2_000);
+
+        assertThat(slotTracker.requireSlot(longQuerySlot)).isTrue();
+        assertThat(slotTracker.requireSlot(shortQuerySlot)).isTrue();
+        assertThat(slotTracker.requireSlot(shorterQuerySlot)).isTrue();
+        slotTracker.allocateSlot(longQuerySlot);
+        slotTracker.allocateSlot(shortQuerySlot);
+        slotTracker.allocateSlot(shorterQuerySlot);
+
+        // The whole expired prefix is peaked in one scan, in the order the slots expire,
+        // even though the slot which is not expired yet has an earlier pending deadline.
+        assertThat(slotTracker.peakExpiredSlots()).containsExactly(shorterQuerySlot, shortQuerySlot);
+
+        // After the expired slots are released, the scan is empty and the next deadline is in the future,
+        // which is the precondition the slot manager worker relies on to block instead of looping.
+        slotTracker.releaseSlot(shorterQuerySlot.getSlotId());
+        slotTracker.releaseSlot(shortQuerySlot.getSlotId());
+        assertThat(slotTracker.peakExpiredSlots()).isEmpty();
+        assertThat(slotTracker.getMinExpiredTimeMs()).isGreaterThan(System.currentTimeMillis());
+    }
+
+    @Test
+    public void testMinExpiredTimeMs() {
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
+        assertThat(slotTracker.getMinExpiredTimeMs()).isZero();
+
+        long nowMs = System.currentTimeMillis();
+        LogicalSlot slot = generateSlot(nowMs - 10_000, nowMs + 600_000);
+        assertThat(slotTracker.requireSlot(slot)).isTrue();
+        slotTracker.allocateSlot(slot);
+
+        // The pending deadline has passed, so only the allocated deadline can tell when the slot expires.
+        assertThat(slotTracker.getMinExpiredTimeMs()).isEqualTo(slot.getExpiredAllocatedTimeMs());
+        assertThat(slotTracker.peakExpiredSlots()).isEmpty();
+    }
+
+    private static LogicalSlot generateSlot(long expiredPendingTimeMs, long expiredAllocatedTimeMs) {
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, 1, expiredPendingTimeMs, expiredAllocatedTimeMs, 0,
+                0, 0);
+    }
 }

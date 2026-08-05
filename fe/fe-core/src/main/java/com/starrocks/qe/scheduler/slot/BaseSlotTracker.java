@@ -56,8 +56,12 @@ public abstract class BaseSlotTracker {
     private static final Logger LOG = LogManager.getLogger(BaseSlotTracker.class);
 
     protected final ConcurrentMap<TUniqueId, LogicalSlot> slots = new ConcurrentHashMap<>();
+    /**
+     * Ordered by {@link LogicalSlot#getExpiredAllocatedTimeMs()}, the deadline which
+     * {@link #peakExpiredSlots()} judges, so that the scan can stop at the first slot which is not expired yet.
+     */
     protected final Set<LogicalSlot> slotsOrderByExpiredTime = new TreeSet<>(
-            Comparator.comparingLong(LogicalSlot::getExpiredPendingTimeMs)
+            Comparator.comparingLong(LogicalSlot::getExpiredAllocatedTimeMs)
                     .thenComparing(LogicalSlot::getSlotId));
 
     protected final Map<TUniqueId, LogicalSlot> pendingSlots = new HashMap<>();
@@ -302,11 +306,14 @@ public abstract class BaseSlotTracker {
         return expiredSlots;
     }
 
+    /**
+     * The earliest time when a tracked slot becomes expired, or 0 if no slot is tracked.
+     */
     public long getMinExpiredTimeMs() {
         if (slotsOrderByExpiredTime.isEmpty()) {
             return 0;
         }
-        return slotsOrderByExpiredTime.iterator().next().getExpiredPendingTimeMs();
+        return slotsOrderByExpiredTime.iterator().next().getExpiredAllocatedTimeMs();
     }
 
     public double getEarliestQueryWaitTimeSecond() {
