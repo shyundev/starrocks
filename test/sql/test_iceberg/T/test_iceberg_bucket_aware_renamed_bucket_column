@@ -1,0 +1,44 @@
+-- name: test_iceberg_bucket_aware_renamed_bucket_column
+
+-- Regression for bucket-aware execution: initBucketInfo paired a bucket column with its partition
+-- field by the name "<column>_bucket", which RENAME COLUMN keeps, so a renamed column matched
+-- nothing. onebucket_1 then has nothing left to match and the query errors; twobucket_1 still
+-- matches k1 and returns a wrong count. Both plan as COLOCATE either way, so only the results tell
+-- fixed from unfixed. Keep k1 at 16 buckets and id on more than one: k1's 16 makes extractBucketId's
+-- radix 17, so a missing bucket(id, 4) shifts ids by a multiple of 17, which the default balance
+-- assignment hides on 1 and 17 workers.
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+create table onebucket_1 (id int, v int) partition by bucket(id, 8) properties ("file_format"="parquet");
+create table onebucket_2 (id int, v int) partition by bucket(id, 8) properties ("file_format"="parquet");
+insert into onebucket_1 select generate_series, generate_series from table(generate_series(1, 100));
+insert into onebucket_2 select generate_series, generate_series from table(generate_series(1, 100));
+alter table onebucket_1 rename column id to id2;
+
+create table twobucket_1 (id int, k1 int) partition by bucket(id, 4), bucket(k1, 16) properties ("file_format"="parquet");
+create table twobucket_2 (id int, k1 int) partition by bucket(id, 4), bucket(k1, 16) properties ("file_format"="parquet");
+insert into twobucket_1 select generate_series, generate_series from table(generate_series(1, 200));
+insert into twobucket_2 select generate_series, generate_series from table(generate_series(1, 200));
+alter table twobucket_1 rename column id to id2;
+
+set enable_bucket_aware_execution_on_lake = true;
+function: assert_explain_contains('select count(*) from onebucket_1 a join onebucket_2 b on a.id2 = b.id', 'INNER JOIN (COLOCATE)')
+function: assert_explain_contains('select count(*) from twobucket_1 a join twobucket_2 b on a.id2 = b.id and a.k1 = b.k1', 'INNER JOIN (COLOCATE)')
+select count(*) from onebucket_1 a join onebucket_2 b on a.id2 = b.id;
+select count(*) from twobucket_1 a join twobucket_2 b on a.id2 = b.id and a.k1 = b.k1;
+
+set enable_bucket_aware_execution_on_lake = false;
+select count(*) from onebucket_1 a join onebucket_2 b on a.id2 = b.id;
+select count(*) from twobucket_1 a join twobucket_2 b on a.id2 = b.id and a.k1 = b.k1;
+
+drop table onebucket_1 force;
+drop table onebucket_2 force;
+drop table twobucket_1 force;
+drop table twobucket_2 force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

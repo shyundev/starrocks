@@ -28,6 +28,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
@@ -132,6 +133,91 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 // 2 data-j2
                 Assertions.assertEquals(2, mappingId);
             }
+        }
+    }
+
+    private IcebergTable createIcebergTable(TestTables.TestTable nativeTable) {
+        return new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db", "table", "",
+                IcebergApiConverter.toFullSchemas(nativeTable.schema(), nativeTable), nativeTable, Maps.newHashMap());
+    }
+
+    private IcebergConnectorScanRangeSource createScanRangeSource(
+            IcebergTable table, List<BucketProperty> bucketProperties) {
+        return new IcebergConnectorScanRangeSource(table, RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY,
+                tupleDescriptor, Optional.of(bucketProperties), PartitionIdGenerator.of(), false, false);
+    }
+
+    @Test
+    public void testExtractBucketIdWithCustomBucketFieldName() {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J)
+                .identity("k2")
+                .bucket("id", BUCKETS_NUMBER, "id_partition")
+                .build();
+        TestTables.TestTable nativeTable = create(SCHEMA_J, spec, "tcustomname", 1);
+        nativeTable.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/data-custom-name.parquet").withFileSizeInBytes(10)
+                .withPartitionPath("k2=2/id_partition=3").withRecordCount(2).build()).commit();
+
+        IcebergTable icebergTable = createIcebergTable(nativeTable);
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals(1, bucketProperties.size());
+
+        FileScanTask task = Lists.newArrayList(nativeTable.newScan().planFiles()).get(0);
+        // only the bucket field folds into the bucket id, so this is the file's id bucket
+        Assertions.assertEquals(3, createScanRangeSource(icebergTable, bucketProperties).extractBucketId(task));
+    }
+
+    @Test
+    public void testExtractBucketIdAfterRenamingBucketColumn() {
+        // FILE_J_2 sits at id_bucket=2/k1_bucket=1, so a wrong position would change the bucket id
+        mockedNativeTable2Bucket.newFastAppend().appendFile(FILE_J_2).commit();
+        String partitionFieldName = mockedNativeTable2Bucket.spec().fields().get(0).name();
+        mockedNativeTable2Bucket.updateSchema().renameColumn("id", "id_renamed").commit();
+        mockedNativeTable2Bucket.refresh();
+        Assertions.assertEquals(partitionFieldName, mockedNativeTable2Bucket.spec().fields().get(0).name());
+
+        IcebergTable icebergTable = createIcebergTable(mockedNativeTable2Bucket);
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals("id_renamed", bucketProperties.get(0).getColumn().getName());
+        FileScanTask task = Lists.newArrayList(mockedNativeTable2Bucket.newScan().planFiles()).get(0);
+
+        Assertions.assertEquals(2 * (BUCKETS_NUMBER2 + 1) + 1,
+                createScanRangeSource(icebergTable, bucketProperties).extractBucketId(task));
+    }
+
+    @Test
+    public void testExtractBucketIdForSnapshotReadAfterRenamingBucketColumn() {
+        mockedNativeTable2Bucket.newFastAppend().appendFile(FILE_J_2).commit();
+        mockedNativeTable2Bucket.refresh();
+        long snapshotId = mockedNativeTable2Bucket.currentSnapshot().snapshotId();
+        mockedNativeTable2Bucket.updateSchema().renameColumn("id", "id_renamed").commit();
+        mockedNativeTable2Bucket.refresh();
+
+        IcebergTable snapshotTable = createIcebergTable(mockedNativeTable2Bucket).withReadMetadata(
+                IcebergMetadata.getSnapshotSchema(mockedNativeTable2Bucket, snapshotId),
+                IcebergMetadata.getSnapshotSpecs(mockedNativeTable2Bucket, snapshotId));
+        List<BucketProperty> bucketProperties = snapshotTable.getBucketProperties();
+        // the current schema says id_renamed, the snapshot schema still says id
+        Assertions.assertEquals("id", bucketProperties.get(0).getColumn().getName());
+
+        FileScanTask task =
+                Lists.newArrayList(mockedNativeTable2Bucket.newScan().useSnapshot(snapshotId).planFiles()).get(0);
+        Assertions.assertEquals(2 * (BUCKETS_NUMBER2 + 1) + 1,
+                createScanRangeSource(snapshotTable, bucketProperties).extractBucketId(task));
+    }
+
+    @Test
+    public void testInitBucketInfoRejectsBucketColumnWithoutPartitionField() {
+        IcebergTable icebergTable = createIcebergTable(mockedNativeTable2Bucket);
+        // k2 is a table column but is not bucketed, and "absent" is not a column at all
+        for (String column : List.of("k2", "absent")) {
+            List<BucketProperty> bucketProperties = List.of(
+                    new BucketProperty(TBucketFunction.MURMUR3_X86_32, BUCKETS_NUMBER, new Column(column, VARCHAR)));
+            IllegalStateException e = Assertions.assertThrows(IllegalStateException.class,
+                    () -> createScanRangeSource(icebergTable, bucketProperties));
+            Assertions.assertEquals(
+                    "no bucket partition field for column " + column + " with " + BUCKETS_NUMBER + " buckets",
+                    e.getMessage());
         }
     }
 

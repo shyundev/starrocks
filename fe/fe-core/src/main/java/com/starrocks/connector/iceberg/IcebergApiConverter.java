@@ -756,9 +756,14 @@ public class IcebergApiConverter {
     }
 
     public static List<Pair<Integer, Integer>> getBucketSourceIdWithBucketNum(PartitionSpec spec) {
-        return PartitionSpecVisitor.visit(spec, new BucketPartitionSpecVisitor()).stream()
+        return getBucketSourceIdWithBucketNumPerField(spec).stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+    }
+
+    // Keeps a null for each non-bucket field, so an index into the result is also an index into the partition tuple.
+    static List<Pair<Integer, Integer>> getBucketSourceIdWithBucketNumPerField(PartitionSpec spec) {
+        return PartitionSpecVisitor.visit(spec, new BucketPartitionSpecVisitor());
     }
 
     private static class BucketPartitionSpecVisitor

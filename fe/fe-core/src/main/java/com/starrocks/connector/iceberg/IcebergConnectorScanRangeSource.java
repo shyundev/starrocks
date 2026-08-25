@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Lists;
@@ -64,6 +65,7 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ContentFileUtil;
@@ -261,14 +263,20 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private void initBucketInfo() {
         if (bucketProperties.isPresent()) {
-            List<PartitionField> fields = table.getNativeTable().spec().fields();
+            // Each bucketInfo entry is (position in the partition tuple, bucket count) for one bucket column.
+            // getBucketProperties() builds a BucketProperty per (source field id, bucket count) pair and takes
+            // the column name from the read schema, so look the position up by that pair. Only single-spec
+            // tables reach here (hasBucketProperties()), so the positions fit every file.
+            PartitionSpec spec = table.getNativeTable().spec();
+            List<Pair<Integer, Integer>> specBuckets = IcebergApiConverter.getBucketSourceIdWithBucketNumPerField(spec);
+            Schema schema = table.getReadSchema();
             for (BucketProperty bucket : bucketProperties.get()) {
-                for (int i = 0; i < fields.size(); i++) {
-                    if (fields.get(i).name().equals(bucket.getColumn().getName() + "_bucket")) {
-                        bucketInfo.add(new Pair<>(i, bucket.getBucketNum()));
-                        break;
-                    }
-                }
+                Types.NestedField sourceField = schema.findField(bucket.getColumn().getName());
+                int index = sourceField == null ? -1
+                        : specBuckets.indexOf(new Pair<>(sourceField.fieldId(), bucket.getBucketNum()));
+                Preconditions.checkState(index >= 0, "no bucket partition field for column %s with %s buckets",
+                        bucket.getColumn().getName(), bucket.getBucketNum());
+                bucketInfo.add(new Pair<>(index, bucket.getBucketNum()));
             }
         }
     }

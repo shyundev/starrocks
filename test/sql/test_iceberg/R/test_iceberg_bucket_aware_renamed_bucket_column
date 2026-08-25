@@ -1,0 +1,89 @@
+-- name: test_iceberg_bucket_aware_renamed_bucket_column
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create table onebucket_1 (id int, v int) partition by bucket(id, 8) properties ("file_format"="parquet");
+-- result:
+-- !result
+create table onebucket_2 (id int, v int) partition by bucket(id, 8) properties ("file_format"="parquet");
+-- result:
+-- !result
+insert into onebucket_1 select generate_series, generate_series from table(generate_series(1, 100));
+-- result:
+-- !result
+insert into onebucket_2 select generate_series, generate_series from table(generate_series(1, 100));
+-- result:
+-- !result
+alter table onebucket_1 rename column id to id2;
+-- result:
+-- !result
+create table twobucket_1 (id int, k1 int) partition by bucket(id, 4), bucket(k1, 16) properties ("file_format"="parquet");
+-- result:
+-- !result
+create table twobucket_2 (id int, k1 int) partition by bucket(id, 4), bucket(k1, 16) properties ("file_format"="parquet");
+-- result:
+-- !result
+insert into twobucket_1 select generate_series, generate_series from table(generate_series(1, 200));
+-- result:
+-- !result
+insert into twobucket_2 select generate_series, generate_series from table(generate_series(1, 200));
+-- result:
+-- !result
+alter table twobucket_1 rename column id to id2;
+-- result:
+-- !result
+set enable_bucket_aware_execution_on_lake = true;
+-- result:
+-- !result
+function: assert_explain_contains('select count(*) from onebucket_1 a join onebucket_2 b on a.id2 = b.id', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select count(*) from twobucket_1 a join twobucket_2 b on a.id2 = b.id and a.k1 = b.k1', 'INNER JOIN (COLOCATE)')
+-- result:
+None
+-- !result
+select count(*) from onebucket_1 a join onebucket_2 b on a.id2 = b.id;
+-- result:
+100
+-- !result
+select count(*) from twobucket_1 a join twobucket_2 b on a.id2 = b.id and a.k1 = b.k1;
+-- result:
+200
+-- !result
+set enable_bucket_aware_execution_on_lake = false;
+-- result:
+-- !result
+select count(*) from onebucket_1 a join onebucket_2 b on a.id2 = b.id;
+-- result:
+100
+-- !result
+select count(*) from twobucket_1 a join twobucket_2 b on a.id2 = b.id and a.k1 = b.k1;
+-- result:
+200
+-- !result
+drop table onebucket_1 force;
+-- result:
+-- !result
+drop table onebucket_2 force;
+-- result:
+-- !result
+drop table twobucket_1 force;
+-- result:
+-- !result
+drop table twobucket_2 force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
