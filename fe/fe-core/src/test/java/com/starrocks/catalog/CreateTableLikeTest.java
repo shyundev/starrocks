@@ -297,6 +297,34 @@ public class CreateTableLikeTest {
     }
 
     @Test
+    public void testListPartitionWithNullValue() throws Exception {
+        String createTableSql = "create table test.testTblListNull\n" + "(k1 int, k2 varchar(10))\n"
+                    + "duplicate key(k1)\n" + "partition by list(k1)\n"
+                    + "(partition p1 values in ('1', '2'), partition p2 values in ('3', NULL))\n"
+                    + "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');";
+        String createTableLikeSql = "create table test.testTblListNull_like like test.testTblListNull";
+        checkCreateOlapTableLike(createTableSql, createTableLikeSql, "test", "test", "testTblListNull_like",
+                    "testTblListNull");
+        List<String> ddl = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("test", "testTblListNull"), ddl, null, null, false, true);
+        Assertions.assertTrue(ddl.get(0).contains("PARTITION p2 VALUES IN ('3', NULL)"), ddl.get(0));
+
+        String createMultiTableSql = "create table test.testTblMultiListNull\n" + "(k1 int, k2 varchar(10))\n"
+                    + "duplicate key(k1)\n" + "partition by list(k1, k2)\n"
+                    + "(partition p1 values in (('1', 'a'), (NULL, 'b')), partition p2 values in (('2', NULL)))\n"
+                    + "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');";
+        String createMultiTableLikeSql = "create table test.testTblMultiListNull_like like test.testTblMultiListNull";
+        checkCreateOlapTableLike(createMultiTableSql, createMultiTableLikeSql, "test", "test",
+                    "testTblMultiListNull_like", "testTblMultiListNull");
+        ddl = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("test", "testTblMultiListNull"), ddl, null, null, false, true);
+        Assertions.assertTrue(ddl.get(0).contains("PARTITION p1 VALUES IN (('1', 'a'), (NULL, 'b'))"), ddl.get(0));
+        Assertions.assertTrue(ddl.get(0).contains("PARTITION p2 VALUES IN (('2', NULL))"), ddl.get(0));
+    }
+
+    @Test
     public void testAbnormal() {
         // 1. create table with same name
         String createTableSql = "create table test.testAbTbl1\n" + "(k1 int, k2 int)\n" + "duplicate key(k1)\n"

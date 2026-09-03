@@ -458,8 +458,12 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     private String valuesToString(List<LiteralExpr> values) {
-        return "(" + values.stream().map(value -> "\'" + value.getStringValue() + "\'")
+        return "(" + values.stream().map(ListPartitionInfo::valueToSql)
                 .collect(Collectors.joining(", ")) + ")";
+    }
+
+    private static String valueToSql(LiteralExpr value) {
+        return value.isConstantNull() ? "NULL" : "\'" + value.getStringValue() + "\'";
     }
 
     private String multiListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
@@ -488,7 +492,7 @@ public class ListPartitionInfo extends PartitionInfo {
 
     private String multiValuesToString(List<List<LiteralExpr>> multiValues) {
         return "(" + multiValues.stream()
-                .map(values -> "(" + values.stream().map(value -> "\'" + value.getStringValue() + "\'")
+                .map(values -> "(" + values.stream().map(ListPartitionInfo::valueToSql)
                         .collect(Collectors.joining(", ")) + ")")
                 .collect(Collectors.joining(", ")) + ")";
     }
