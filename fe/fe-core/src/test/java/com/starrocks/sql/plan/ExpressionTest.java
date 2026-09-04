@@ -1823,6 +1823,23 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan, "<slot 4> : NULL");
     }
 
+    // The unit comes from the whole function name: "milliseconds_add" and "microseconds_add" both contain
+    // "seconds_", so nesting them must not fold into seconds.
+    @Test
+    public void testSubSecondDateAddNotReduced() throws Exception {
+        String sql = "select milliseconds_add(milliseconds_add(v2, 500), 500) from t0";
+        assertContains(getFragmentPlan(sql), "milliseconds_add(CAST(2: v2 AS DATETIME), 1000)");
+
+        sql = "select microseconds_add(microseconds_add(v2, 1), 2) from t0";
+        assertContains(getFragmentPlan(sql), "microseconds_add(CAST(2: v2 AS DATETIME), 3)");
+
+        sql = "select microseconds_add(seconds_add(v2, 1), 1) from t0";
+        assertContains(getFragmentPlan(sql), "microseconds_add(seconds_add(CAST(2: v2 AS DATETIME), 1), 1)");
+
+        sql = "select seconds_add(milliseconds_add(v2, 500), 1) from t0";
+        assertContains(getFragmentPlan(sql), "seconds_add(milliseconds_add(CAST(2: v2 AS DATETIME), 500), 1)");
+    }
+
     @Test
     public void testDateTrunc() throws Exception {
         String sql = "select date_trunc('day', cast(v2 as date)) from t0";
