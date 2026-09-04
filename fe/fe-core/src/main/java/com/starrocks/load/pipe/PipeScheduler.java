@@ -45,6 +45,11 @@ public class PipeScheduler extends LeaderDaemon {
 
     @Override
     protected void runAfterLeaseValid() {
+        // update interval
+        if (getInterval() != Config.pipe_scheduler_interval_millis) {
+            setInterval(Config.pipe_scheduler_interval_millis);
+        }
+
         try {
             process();
         } catch (Throwable e) {

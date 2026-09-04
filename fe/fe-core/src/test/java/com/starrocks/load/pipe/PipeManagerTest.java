@@ -18,6 +18,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -137,6 +138,29 @@ public class PipeManagerTest {
         long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
+    }
+
+    @Test
+    public void testSchedulerIntervalFollowsConfig() {
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        int originSchedulerInterval = Config.pipe_scheduler_interval_millis;
+        int originListenerInterval = Config.pipe_listener_interval_millis;
+        try {
+            PipeScheduler scheduler = new PipeScheduler(pm);
+            Assertions.assertEquals(originSchedulerInterval, scheduler.getInterval());
+            Config.pipe_scheduler_interval_millis = originSchedulerInterval + 1000;
+            scheduler.runAfterLeaseValid();
+            Assertions.assertEquals(originSchedulerInterval + 1000, scheduler.getInterval());
+
+            PipeListener listener = new PipeListener(pm);
+            Assertions.assertEquals(originListenerInterval, listener.getInterval());
+            Config.pipe_listener_interval_millis = originListenerInterval + 1000;
+            listener.runAfterLeaseValid();
+            Assertions.assertEquals(originListenerInterval + 1000, listener.getInterval());
+        } finally {
+            Config.pipe_scheduler_interval_millis = originSchedulerInterval;
+            Config.pipe_listener_interval_millis = originListenerInterval;
+        }
     }
 
     private void createPipe(String sql) throws Exception {

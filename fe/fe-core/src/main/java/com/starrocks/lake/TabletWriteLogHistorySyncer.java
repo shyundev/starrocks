@@ -105,6 +105,11 @@ public class TabletWriteLogHistorySyncer extends LeaderDaemon {
 
     @Override
     protected void runAfterLeaseValid() {
+        // update interval
+        if (getInterval() != Config.tablet_write_log_history_sync_interval_sec * 1000L) {
+            setInterval(Config.tablet_write_log_history_sync_interval_sec * 1000L);
+        }
+
         if (FeConstants.runningUnitTest) {
             return;
         }
