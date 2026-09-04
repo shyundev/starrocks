@@ -47,7 +47,6 @@ import org.apache.commons.lang.text.StrTokenizer;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -441,8 +440,13 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
     // reduce `date_sub(date_add(x, 1), 2)` -> `date_sub(x, 1)`
     private ScalarOperator simplifiedTimeFns(CallOperator call) {
-        String fn = TIME_FNS.keySet().stream().filter(s -> call.getFnName().contains(s))
-                .findFirst().orElse("impossible");
+        // Take the unit from the whole function name: "milliseconds_add" and "microseconds_add" both contain
+        // "seconds_", so matching on a substring merges them as seconds and scales the interval by 1000.
+        List<String> unit = TIME_FNS.values().stream().filter(names -> names.contains(call.getFnName()))
+                .findFirst().orElse(null);
+        if (unit == null) {
+            return call;
+        }
         if (!call.getChild(1).isConstantRef() || !IntegerType.INT.equals(call.getChild(1).getType())) {
             return call;
         }
@@ -451,7 +455,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         CallOperator child = call.getChild(0).cast();
-        if (!child.getFnName().contains(fn) || !TIME_FN_NAMES.contains(child.getFnName())) {
+        if (!unit.contains(child.getFnName())) {
             return call;
         }
         if (!child.getChild(1).isConstantRef() || !IntegerType.INT.equals(child.getChild(1).getType())) {
@@ -472,8 +476,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         ConstantOperator interval = ConstantOperator.createInt(Math.abs(result));
 
         if (result != 0) {
-            String fnName = result < 0 ? Objects.requireNonNull(TIME_FNS.get(fn)).get(1) :
-                    Objects.requireNonNull(TIME_FNS.get(fn)).get(0);
+            String fnName = result < 0 ? unit.get(1) : unit.get(0);
             Function newFn = ExprUtils.getBuiltinFunction(fnName, call.getFunction().getArgs(),
                     Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(fnName, call.getType(), Lists.newArrayList(child.getChild(0), interval), newFn);
