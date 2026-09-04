@@ -484,7 +484,7 @@ public class ExpressionStatisticCalculator {
                     Optional<ConstantOperator> maxRes;
                     Optional<ConstantOperator> minRes;
                     maxRes = max.castTo(cast.getType());
-                    minRes = max.castTo(cast.getType());
+                    minRes = min.castTo(cast.getType());
                     if (maxRes.isPresent() && minRes.isPresent()) {
                         max = maxRes.get();
                         min = minRes.get();

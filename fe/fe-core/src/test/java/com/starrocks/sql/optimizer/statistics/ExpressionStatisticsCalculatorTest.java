@@ -1279,6 +1279,29 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCastIntegerToDateKeepsMinValue() {
+        ColumnRefOperator dateKey = new ColumnRefOperator(0, IntegerType.INT, "dt", true);
+        Statistics statistics = Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(dateKey, new ColumnStatistic(20200101, 20241231, 0, 4, 1827))
+                .build();
+
+        CastOperator cast = new CastOperator(DateType.DATE, dateKey);
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(cast, statistics);
+        Assertions.assertEquals(getLongFromDateTime(LocalDateTime.of(2020, 1, 1, 0, 0, 0)),
+                columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(getLongFromDateTime(LocalDateTime.of(2024, 12, 31, 0, 0, 0)),
+                columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(1827, columnStatistic.getDistinctValuesCount(), 0.001);
+
+        cast = new CastOperator(DateType.DATETIME, dateKey);
+        columnStatistic = ExpressionStatisticCalculator.calculate(cast, statistics);
+        Assertions.assertEquals(getLongFromDateTime(LocalDateTime.of(2020, 1, 1, 0, 0, 0)),
+                columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(getLongFromDateTime(LocalDateTime.of(2024, 12, 31, 0, 0, 0)),
+                columnStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
     public void testCaseWhenOperator() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         BinaryPredicateOperator whenOperator1 =
