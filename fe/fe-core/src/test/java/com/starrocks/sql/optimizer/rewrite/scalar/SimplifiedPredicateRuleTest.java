@@ -163,4 +163,21 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
         starRocksAssert.query("SELECT hour(to_datetime(ts, 4)) FROM test_timestamp")
                 .explainWithout("hour_from_unixtime");
     }
+
+    // Only the cast the analyzer puts on from_unixtime's string result may be looked through. Everything
+    // else between hour() and the rewritten call contributes to the hour that is read.
+    @Test
+    public void keepHourArgumentOutsideFromUnixTime() throws Exception {
+        starRocksAssert.query("SELECT hour(date_add(from_unixtime(ts), INTERVAL 8 HOUR)) FROM test_timestamp")
+                .explainWithout("hour_from_unixtime");
+
+        starRocksAssert.query("SELECT hour(cast(from_unixtime(ts) as date)) FROM test_timestamp")
+                .explainWithout("hour_from_unixtime");
+
+        starRocksAssert.query("SELECT hour(date_add(to_datetime(ts), INTERVAL 8 HOUR)) FROM test_timestamp")
+                .explainWithout("hour_from_unixtime");
+
+        starRocksAssert.query("SELECT hour(if(id > 0, from_unixtime(ts), from_unixtime(id))) FROM test_timestamp")
+                .explainWithout("hour_from_unixtime");
+    }
 }
