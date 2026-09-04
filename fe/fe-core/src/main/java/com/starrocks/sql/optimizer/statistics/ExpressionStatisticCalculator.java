@@ -766,7 +766,7 @@ public class ExpressionStatisticCalculator {
                     }
                     minValue = absMinValue;
                     maxValue = absMaxValue;
-                    distinctValue = maxValue - minValue + 1;
+                    distinctValue = Math.min(distinctValue, maxValue - minValue + 1);
                     break;
                 case FunctionSet.ACOS:
                 case FunctionSet.ASIN:

@@ -1279,6 +1279,27 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testAbsDistinctValuesBoundedByInput() {
+        ColumnRefOperator column = new ColumnRefOperator(0, IntegerType.BIGINT, "v", true);
+        CallOperator abs = new CallOperator(FunctionSet.ABS, IntegerType.BIGINT, Lists.newArrayList(column));
+
+        Statistics statistics = Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistic(column,
+                        new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 8, 100))
+                .build();
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(abs, statistics);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+
+        statistics = Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistic(column, new ColumnStatistic(-1000000000, 1000000000, 0, 8, 100))
+                .build();
+        columnStatistic = ExpressionStatisticCalculator.calculate(abs, statistics);
+        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1000000000, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
     public void testCaseWhenOperator() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         BinaryPredicateOperator whenOperator1 =
