@@ -1279,6 +1279,33 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testDateFunctionsWithStatisticsOutsideDatetimeRange() {
+        ColumnRefOperator column = new ColumnRefOperator(0, IntegerType.BIGINT, "ns", true);
+        Statistics statistics = Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(column, new ColumnStatistic(1.6e18, 1.7e18, 0, 8, 100))
+                .build();
+
+        for (String fn : List.of(FunctionSet.TO_DATE, FunctionSet.DATE, FunctionSet.TO_DAYS)) {
+            CallOperator call = new CallOperator(fn, DateType.DATE, Lists.newArrayList(column));
+            ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(call, statistics);
+            Assertions.assertEquals(1.6e18, columnStatistic.getMinValue(), 1, fn);
+            Assertions.assertEquals(1.7e18, columnStatistic.getMaxValue(), 1, fn);
+            Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001, fn);
+        }
+
+        CallOperator dateTrunc = new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("day"), column));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(dateTrunc, statistics);
+        Assertions.assertTrue(columnStatistic.isInfiniteRange());
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+
+        CallOperator week = new CallOperator(FunctionSet.WEEK, IntegerType.INT,
+                Lists.newArrayList(column, ConstantOperator.createInt(0)));
+        columnStatistic = ExpressionStatisticCalculator.calculate(week, statistics);
+        Assertions.assertEquals(53, columnStatistic.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
     public void testCaseWhenOperator() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         BinaryPredicateOperator whenOperator1 =

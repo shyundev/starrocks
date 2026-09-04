@@ -68,6 +68,8 @@ public class ExpressionStatisticCalculator {
     public static final long DAYS_FROM_0_TO_1970 = 719528;
     public static final long DAYS_FROM_0_TO_9999 = 3652424;
     private static final double UINT32_DOMAIN_CARDINALITY = 4294967296.0;
+    private static final double MIN_DATETIME_EPOCH_SECOND = Utils.getLongFromDateTime(ConstantOperator.MIN_DATETIME);
+    private static final double MAX_DATETIME_EPOCH_SECOND = Utils.getLongFromDateTime(ConstantOperator.MAX_DATETIME);
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
@@ -82,6 +84,13 @@ public class ExpressionStatisticCalculator {
     }
 
     private record NullableBooleanProbabilities(double pTrue, double pFalse, double pNull) {
+    }
+
+    // A min/max value is only usable as a datetime when it lies within the datetime range. Statistics of a
+    // non-datetime input (for example a bigint whose cast to datetime could not be folded) can be far outside it,
+    // and Utils.getDatetimeFromLong throws DateTimeException for such values.
+    private static boolean isDatetimeValue(double value) {
+        return value >= MIN_DATETIME_EPOCH_SECOND && value <= MAX_DATETIME_EPOCH_SECOND;
     }
 
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
@@ -599,7 +608,7 @@ public class ExpressionStatisticCalculator {
             double minValue = columnStatistic.getMinValue();
             double maxValue = columnStatistic.getMaxValue();
             double distinctValue = Math.min(rowCount, columnStatistic.getDistinctValuesCount());
-            final boolean minMaxValueInfinite = Double.isInfinite(minValue) || Double.isInfinite(maxValue);
+            final boolean minMaxValueOutOfDatetimeRange = !isDatetimeValue(minValue) || !isDatetimeValue(maxValue);
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.SIGN:
                     minValue = -1;
@@ -703,7 +712,7 @@ public class ExpressionStatisticCalculator {
                     maxValue = Double.POSITIVE_INFINITY;
                     break;
                 case FunctionSet.TO_DATE, FunctionSet.DATE:
-                    if (minMaxValueInfinite) {
+                    if (minMaxValueOutOfDatetimeRange) {
                         break;
                     }
                     minValue = Utils.getDatetimeFromLong((long) minValue).toLocalDate()
@@ -712,7 +721,7 @@ public class ExpressionStatisticCalculator {
                             .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
                     break;
                 case FunctionSet.TO_DAYS:
-                    if (minMaxValueInfinite) {
+                    if (minMaxValueOutOfDatetimeRange) {
                         break;
                     }
                     minValue = Utils.getDatetimeFromLong((long) minValue).toLocalDate().toEpochDay() +
@@ -1234,8 +1243,7 @@ public class ExpressionStatisticCalculator {
             if (fmtArg.isPresent()) {
                 final var fmtString = fmtArg.get().getVarchar().toLowerCase();
                 final Optional<Long> estimatedNdv;
-                if (!dateStatistic.hasNaNValue() && dateStatistic.getMinValue() != Double.NEGATIVE_INFINITY
-                        && dateStatistic.getMaxValue() != Double.POSITIVE_INFINITY) {
+                if (isDatetimeValue(dateStatistic.getMinValue()) && isDatetimeValue(dateStatistic.getMaxValue())) {
                     final var minDateTime = Utils.getDatetimeFromLong((long) dateStatistic.getMinValue());
                     final var maxDateTime = Utils.getDatetimeFromLong((long) dateStatistic.getMaxValue());
                     final var truncatedMinDateTime = truncateDateValue(fmtString, minDateTime, type);
@@ -1509,7 +1517,7 @@ public class ExpressionStatisticCalculator {
         }
 
         private double calcDistinctValForWeek(ColumnStatistic col) {
-            if (col.hasNaNValue() || col.isInfiniteRange()) {
+            if (!isDatetimeValue(col.getMinValue()) || !isDatetimeValue(col.getMaxValue())) {
                 return 53;
             }
             LocalDateTime min = Utils.getDatetimeFromLong((long) col.getMinValue());
