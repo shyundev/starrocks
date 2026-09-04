@@ -6718,6 +6718,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             spillOptions.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
             spillOptions.setEnable_spill_buffer_read(enableSpillBufferRead);
             spillOptions.setMax_spill_read_buffer_bytes_per_driver(maxSpillReadBufferBytesPerDriver);
+            spillOptions.setSpill_hash_join_probe_op_max_bytes(spillHashJoinProbeOpMaxBytes);
             if (enableSpillToRemoteStorage && !spillStorageVolume.isEmpty()) {
                 // find storage volume config
                 GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
