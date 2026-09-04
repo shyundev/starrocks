@@ -769,10 +769,10 @@ public class ExpressionStatisticCalculator {
                     distinctValue = maxValue - minValue + 1;
                     break;
                 case FunctionSet.ACOS:
-                case FunctionSet.ASIN:
                     minValue = 0;
                     maxValue = Math.PI;
                     break;
+                case FunctionSet.ASIN:
                 case FunctionSet.ATAN:
                 case FunctionSet.ATAN2:
                     minValue = -Math.PI / 2;
