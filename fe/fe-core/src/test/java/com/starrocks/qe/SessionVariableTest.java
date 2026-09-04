@@ -163,6 +163,17 @@ public class SessionVariableTest {
     }
 
     @Test
+    public void testSpillHashJoinProbeOpMaxBytesToThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableSpill(true);
+        sessionVariable.spillHashJoinProbeOpMaxBytes = 4096L;
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+
+        Assertions.assertTrue(queryOptions.getSpill_options().isSetSpill_hash_join_probe_op_max_bytes());
+        Assertions.assertEquals(4096L, queryOptions.getSpill_options().getSpill_hash_join_probe_op_max_bytes());
+    }
+
+    @Test
     public void testBinaryEncodingDefaultsAndToThrift() {
         SessionVariable sessionVariable = new SessionVariable();
         TQueryOptions queryOptions = sessionVariable.toThrift();
