@@ -650,4 +650,62 @@ public class MySqlAndJDBCScanNodeTest {
         Assertions.assertFalse(nodeString.contains("FROM `(select id, name from remote_table) starrocks_query`"),
                 nodeString);
     }
+
+    private JDBCScanNode createScanNodeWithStringFilters(String jdbcUri) throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("user", "root");
+        properties.put("password", "123456");
+        properties.put("jdbc_uri", jdbcUri);
+        properties.put("driver_url", "driver_url");
+        properties.put("checksum", "checksum");
+        properties.put("driver_class", "driver_class");
+        Column column = new Column("col", VarcharType.VARCHAR);
+        JDBCTable table = new JDBCTable(1, "jdbc_table", Collections.singletonList(column), properties);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(table);
+        SlotDescriptor slot = createSlotDescriptor(1, column);
+        tupleDesc.addSlot(slot);
+        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, table);
+        Expr slotRef = new SlotRef("col", slot);
+        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ, slotRef, StringLiteral.create("O'Reilly")));
+        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.NE, slotRef, StringLiteral.create("C:\\dir\\file")));
+        scanNode.getConjuncts().add(new InPredicate(slotRef, Lists.newArrayList(StringLiteral.create("a'b"),
+                new LargeStringLiteral("x'y" + Strings.repeat("z", 60), NodePosition.ZERO)), false));
+        scanNode.computeColumnsAndFilters();
+        return scanNode;
+    }
+
+    @Test
+    public void testStringLiteralsInPostgreSQLJDBCScanNode() throws DdlException {
+        String nodeString = createScanNodeWithStringFilters("jdbc:postgresql://localhost:5432/testdb")
+                .getExplainString();
+        Assertions.assertTrue(nodeString.contains("(\"col\" = 'O''Reilly')"), nodeString);
+        Assertions.assertTrue(nodeString.contains("(\"col\" != 'C:\\dir\\file')"), nodeString);
+        Assertions.assertTrue(nodeString.contains("(\"col\" IN ('a''b', 'x''y" + Strings.repeat("z", 60) + "'))"),
+                nodeString);
+    }
+
+    @Test
+    public void testStringLiteralsInOracleJDBCScanNode() throws DdlException {
+        String nodeString = createScanNodeWithStringFilters("jdbc:oracle:thin:@localhost:1521:orcl").getExplainString();
+        Assertions.assertTrue(nodeString.contains("(col = 'O''Reilly')"), nodeString);
+        Assertions.assertTrue(nodeString.contains("(col != 'C:\\dir\\file')"), nodeString);
+    }
+
+    @Test
+    public void testStringLiteralsInSQLServerJDBCScanNode() throws DdlException {
+        String nodeString = createScanNodeWithStringFilters("jdbc:sqlserver://localhost:1433;databaseName=testdb")
+                .getExplainString();
+        Assertions.assertTrue(nodeString.contains("(col = 'O''Reilly')"), nodeString);
+        Assertions.assertTrue(nodeString.contains("(col != 'C:\\dir\\file')"), nodeString);
+    }
+
+    @Test
+    public void testStringLiteralsInMySQLJDBCScanNode() throws DdlException {
+        String nodeString = createScanNodeWithStringFilters("jdbc:mysql://localhost:3306").getExplainString();
+        Assertions.assertTrue(nodeString.contains("(`col` = 'O\\'Reilly')"), nodeString);
+        Assertions.assertTrue(nodeString.contains("(`col` != 'C:\\\\dir\\\\file')"), nodeString);
+        Assertions.assertTrue(nodeString.contains("(`col` IN ('a\\'b', 'x\\'y" + Strings.repeat("z", 60) + "'))"),
+                nodeString);
+    }
 }
