@@ -25,3 +25,45 @@ WHERE c DIV 10 > 5
 ORDER BY id;
 
 DROP TABLE division_monotonicity_${uuid0};
+
+-- name: test_multiplication_monotonicity
+CREATE TABLE multiplication_monotonicity_${uuid0} (
+    id INT,
+    c BIGINT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO multiplication_monotonicity_${uuid0} VALUES
+    (1, -9223372036854775808),
+    (2, 9223372036854775807),
+    (3, 7),
+    (4, -1);
+
+SELECT id, c, -1 * c AS product
+FROM multiplication_monotonicity_${uuid0}
+WHERE -1 * c >= -100
+ORDER BY id;
+
+DROP TABLE multiplication_monotonicity_${uuid0};
+
+CREATE TABLE multiplication_overflow_${uuid0} (
+    id INT,
+    c BIGINT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO multiplication_overflow_${uuid0} VALUES
+    (1, -4611686018427387904),
+    (2, 4611686018427387904),
+    (3, 1);
+
+SELECT id, c, 2 * c AS product
+FROM multiplication_overflow_${uuid0}
+WHERE 2 * c > 0
+ORDER BY id;
+
+DROP TABLE multiplication_overflow_${uuid0};

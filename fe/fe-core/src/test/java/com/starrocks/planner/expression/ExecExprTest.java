@@ -1817,6 +1817,20 @@ public class ExecExprTest {
                     new ArrayList<>(List.of(right, left)));
             assertFalse(divideByColumn.isSelfMonotonic());
         }
+
+        // A fixed point product wraps around on overflow: -1 * BIGINT_MIN is BIGINT_MIN again, so a
+        // zone whose bounds are the type limits evaluates to false at both ends while rows between
+        // them match, and treating it as monotonic prunes the zone away.
+        for (IntegerType type : List.of(IntegerType.TINYINT, IntegerType.SMALLINT, IntegerType.INT,
+                IntegerType.BIGINT, IntegerType.LARGEINT)) {
+            ExecArithmetic multiply = new ExecArithmetic(type, ArithmeticExpr.Operator.MULTIPLY,
+                    new ArrayList<>(List.of(left, right)));
+            assertFalse(multiply.isSelfMonotonic());
+        }
+
+        ExecArithmetic doubleMultiply = new ExecArithmetic(FloatType.DOUBLE, ArithmeticExpr.Operator.MULTIPLY,
+                new ArrayList<>(List.of(left, right)));
+        assertTrue(doubleMultiply.isSelfMonotonic());
     }
 
     @Test
