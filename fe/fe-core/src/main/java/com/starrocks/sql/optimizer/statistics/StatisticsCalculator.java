@@ -2224,13 +2224,22 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return result;
     }
 
+    // A limit outputs at most as many rows as its input has, so the limit alone must not raise the estimate.
+    // An inaccurate input row count is left alone, as it is not a usable upper bound.
+    private static double limitRowCount(Statistics inputStatistics, long limit) {
+        if (inputStatistics.isTableRowCountMayInaccurate()) {
+            return limit;
+        }
+        return Math.min(limit, inputStatistics.getOutputRowCount());
+    }
+
     @Override
     public Void visitLogicalLimit(LogicalLimitOperator node, ExpressionContext context) {
         Statistics inputStatistics = context.getChildStatistics(0);
 
         Statistics.Builder builder = Statistics.builder();
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
-        builder.setOutputRowCount(node.getLimit());
+        builder.setOutputRowCount(limitRowCount(inputStatistics, node.getLimit()));
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -2242,7 +2251,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         Statistics.Builder builder = Statistics.builder();
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
-        builder.setOutputRowCount(node.getLimit());
+        builder.setOutputRowCount(limitRowCount(inputStatistics, node.getLimit()));
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);

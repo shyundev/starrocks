@@ -48,9 +48,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -169,6 +171,45 @@ public class StatisticsCalculatorTest {
     public void after() throws Exception {
         starRocksAssert.dropTable("test_all_type");
         starRocksAssert.dropTable("test_all_type_day_partition");
+    }
+
+    @Test
+    public void testLimitRowCountBoundedByChild() {
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(25);
+        builder.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 25)));
+        Group childGroup = new Group(0);
+        childGroup.setStatistics(builder.build());
+
+        GroupExpression groupExpression =
+                new GroupExpression(LogicalLimitOperator.init(1000000), Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(25, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+
+        groupExpression = new GroupExpression(new PhysicalLimitOperator(0, 1000000, null),
+                Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(25, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+
+        groupExpression = new GroupExpression(LogicalLimitOperator.init(10), Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(10, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+
+        builder.setTableRowCountMayInaccurate(true);
+        childGroup = new Group(0);
+        childGroup.setStatistics(builder.build());
+        groupExpression = new GroupExpression(LogicalLimitOperator.init(1000000), Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(1000000, expressionContext.getStatistics().getOutputRowCount(), 0.001);
     }
 
     @Test
