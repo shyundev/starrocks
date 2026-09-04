@@ -60,24 +60,24 @@ public class JDBCScanNode extends ScanNode {
     private String tableName;
     private JDBCTable table;
 
-    private static final class OracleTemporalLiteralExpr extends LiteralExpr {
+    private static final class RawSqlLiteralExpr extends LiteralExpr {
         private final String sqlLiteral;
 
-        private OracleTemporalLiteralExpr(String sqlLiteral) {
+        private RawSqlLiteralExpr(String sqlLiteral) {
             super();
             this.sqlLiteral = sqlLiteral;
             this.type = VarcharType.VARCHAR;
             analysisDone();
         }
 
-        private OracleTemporalLiteralExpr(OracleTemporalLiteralExpr other) {
+        private RawSqlLiteralExpr(RawSqlLiteralExpr other) {
             super(other);
             this.sqlLiteral = other.sqlLiteral;
         }
 
         @Override
         public Expr clone() {
-            return new OracleTemporalLiteralExpr(this);
+            return new RawSqlLiteralExpr(this);
         }
 
         @Override
@@ -226,6 +226,19 @@ public class JDBCScanNode extends ScanNode {
     private boolean isOracleJdbcUri() {
         String jdbcUri = getJdbcUri();
         return jdbcUri != null && jdbcUri.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle");
+    }
+
+    // PostgreSQL, Oracle and SQL Server read string literals as standard SQL: a quote is doubled
+    // and a backslash is an ordinary character.
+    private boolean usesStandardStringLiterals() {
+        String jdbcUri = getJdbcUri();
+        if (jdbcUri == null) {
+            return false;
+        }
+        return jdbcUri.startsWith("jdbc:postgresql") ||
+                jdbcUri.startsWith("jdbc:postgres") ||
+                jdbcUri.startsWith("jdbc:oracle") ||
+                jdbcUri.startsWith("jdbc:sqlserver");
     }
 
     private static String normalizeColumnName(String columnName) {
@@ -385,7 +398,18 @@ public class JDBCScanNode extends ScanNode {
         String keyword = 
                 (literalValue.length() <= ("0000-00-00").length()) ? (m.matches() ? "date" : "") : "timestamp";
         String escapedValue = literalValue.replace("'", "''");
-        return new OracleTemporalLiteralExpr(keyword + " '" + escapedValue + "'");
+        return new RawSqlLiteralExpr(keyword + " '" + escapedValue + "'");
+    }
+
+    private static Expr rewriteStringLiteralsAsStandardSql(Expr expr) {
+        for (int i = 0; i < expr.getChildren().size(); i++) {
+            expr.setChild(i, rewriteStringLiteralsAsStandardSql(expr.getChild(i)));
+        }
+        if (expr instanceof StringLiteral) {
+            String value = ((StringLiteral) expr).getStringValue();
+            return new RawSqlLiteralExpr("'" + value.replace("'", "''") + "'");
+        }
+        return expr;
     }
 
     private void createJDBCTableFilters() {
@@ -412,11 +436,15 @@ public class JDBCScanNode extends ScanNode {
         if (isOracleJdbcUri()) {
             oracleTemporalColumns = collectOracleTemporalColumns();
         }
+        boolean standardStringLiterals = usesStandardStringLiterals();
         List<String> originalFilters = new ArrayList<>(jdbcConjuncts.size());
         for (Expr p : jdbcConjuncts) {
             p = ExprUtils.replaceLargeStringLiteral(p);
             if (!oracleTemporalColumns.isEmpty()) {
                 p = rewriteOracleTemporalPredicateExpr(p, oracleTemporalColumns);
+            }
+            if (standardStringLiterals) {
+                p = rewriteStringLiteralsAsStandardSql(p);
             }
             originalFilters.add(AstToStringBuilder.toString(p));
         }
