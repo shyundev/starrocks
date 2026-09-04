@@ -378,8 +378,8 @@ public class ExpressionStatisticsCalculatorTest {
         // test asin function
         callOperator = new CallOperator(FunctionSet.ASIN, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        Assertions.assertEquals(columnStatistic.getMaxValue(), Math.PI, 0.001);
-        Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Math.PI / 2, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), -Math.PI / 2, 0.001);
         // test atan function
         callOperator = new CallOperator(FunctionSet.ATAN, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
