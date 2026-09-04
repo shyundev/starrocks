@@ -256,6 +256,35 @@ class ParserTest {
     }
 
     @Test
+    void testUnitAndDdlKeywordsAsIdentifier() {
+        // These keywords are not documented as reserved and only appear after another keyword
+        // (interval unit, USING, SECURITY, ALTER TABLE, PREPARE), so they must stay usable as identifiers.
+        SessionVariable sessionVariable = new SessionVariable();
+        List<String> sqls = Lists.newArrayList(
+                "select microsecond, millisecond, gin, invoker, optimize, prepare from t",
+                "select t.microsecond from db.t where t.millisecond > 0 group by microsecond order by millisecond",
+                "select count(*) from t microsecond join t2 gin on microsecond.k = gin.k",
+                "create table t (microsecond int, millisecond int, gin int, invoker int, optimize int, prepare int)",
+                // keyword usages keep parsing
+                "select date_add('2026-01-01', interval 1 microsecond), timestampdiff(millisecond, d1, d2) from t",
+                "create table t (c1 int, c2 string, index idx (c2) using gin)",
+                "alter table t add index idx (c2) using gin",
+                "prepare s1 from 'select 1'",
+                "deallocate prepare s1",
+                "create view v security invoker as select 1",
+                "alter view v set security invoker",
+                "show alter table optimize",
+                "cancel alter table optimize from t");
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should succeed: " + sql + " errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
     void testParseLargeDecimal() {
         String sql = "select cast(1 as decimal(85,0))";
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
