@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
@@ -127,7 +128,7 @@ public class Explain {
         String outputBuilder = "- Output => [" + outputColumns.stream().map(EXPR_PRINTER::print)
                 .collect(Collectors.joining(", ")) + "]";
 
-        OperatorStr optStrings = new OperatorPrinter().visit(root, new OperatorPrinter.ExplainContext(1));
+        OperatorStr optStrings = new OperatorPrinter().print(root, new OperatorPrinter.ExplainContext(1));
         OperatorStr rootOperatorStr = new OperatorStr(outputBuilder, 0, Lists.newArrayList(optStrings));
         return rootOperatorStr.toString();
     }
@@ -172,16 +173,37 @@ public class Explain {
                     ErrorType.INTERNAL_ERROR);
         }
 
+        OperatorStr print(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            return optExpression.getOp().accept(this, optExpression, context);
+        }
+
+        // Fallback for operators without a dedicated printer. The base visitor routes every
+        // unhandled operator here, so this must not dispatch again.
         @Override
         public OperatorStr visit(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
-            return optExpression.getOp().accept(this, optExpression, context);
+            PhysicalOperator operator = (PhysicalOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- ")
+                    .append(operator.getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', '-'));
+            String outputColumns = "";
+            if (operator instanceof PhysicalScanOperator) {
+                PhysicalScanOperator scan = (PhysicalScanOperator) operator;
+                sb.append(" [").append(scan.getTable().getName()).append("]");
+                outputColumns = "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
+                        .collect(Collectors.joining(", ")) + "]";
+            }
+            sb.append(buildOutputColumns(operator, outputColumns)).append("\n");
+            if (optExpression.getStatistics() != null) {
+                buildCostEstimate(sb, optExpression, context.step);
+            }
+            buildCommonProperty(sb, operator, context.step);
+            return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
         }
 
         List<OperatorStr> buildChildOperatorStr(OptExpression optExpression, int step) {
             List<OperatorStr> childString = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
                 OperatorStr operatorStr =
-                        visit(optExpression.inputAt(childIdx), new OperatorPrinter.ExplainContext(step + 1));
+                        print(optExpression.inputAt(childIdx), new OperatorPrinter.ExplainContext(step + 1));
                 childString.add(operatorStr);
             }
             return childString;
@@ -189,7 +211,7 @@ public class Explain {
 
         @Override
         public OperatorStr visitPhysicalProject(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
-            return visit(optExpression.getInputs().get(0), context);
+            return print(optExpression.getInputs().get(0), context);
         }
 
         @Override
@@ -383,7 +405,7 @@ public class Explain {
 
         @Override
         public OperatorStr visitPhysicalTopN(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
-            OperatorStr child = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr child = print(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
             PhysicalTopNOperator topn = (PhysicalTopNOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder();
             if (topn.getLimit() == Operator.DEFAULT_LIMIT) {
@@ -407,7 +429,7 @@ public class Explain {
         @Override
         public OperatorStr visitPhysicalDistribution(OptExpression optExpression,
                                                      OperatorPrinter.ExplainContext context) {
-            OperatorStr child = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr child = print(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
             PhysicalDistributionOperator exchange = (PhysicalDistributionOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder();
@@ -443,8 +465,8 @@ public class Explain {
         }
 
         public OperatorStr visitPhysicalJoin(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
-            OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
+            OperatorStr left = print(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr right = print(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
 
             PhysicalJoinOperator join = (PhysicalJoinOperator) optExpression.getOp();
             StringBuilder sb =
@@ -474,7 +496,7 @@ public class Explain {
         @Override
         public OperatorStr visitPhysicalHashAggregate(OptExpression optExpression,
                                                       OperatorPrinter.ExplainContext context) {
-            OperatorStr child = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr child = print(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
             PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- AGGREGATE(").append(aggregate.getType()).append(") ");
             sb.append("[").append(aggregate.getGroupBys().stream().map(EXPR_PRINTER::print)
@@ -674,8 +696,8 @@ public class Explain {
 
         @Override
         public OperatorStr visitPhysicalCTEAnchor(OptExpression optExpression, ExplainContext context) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
-            OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
+            OperatorStr left = print(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr right = print(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
 
             PhysicalCTEAnchorOperator anchor = (PhysicalCTEAnchorOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder();

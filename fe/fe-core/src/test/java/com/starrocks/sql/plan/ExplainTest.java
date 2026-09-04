@@ -133,6 +133,28 @@ public class ExplainTest extends PlanTestBase {
     }
 
     @Test
+    public void testExplainLogicalOperatorsWithoutDedicatedPrinter() throws Exception {
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(false);
+        connectContext.getSessionVariable().setLargeInPredicateThreshold(3);
+        try {
+            String sql = "select * from supplier where S_SUPPKEY < 10 order by 1, 2 limit 10";
+            assertContains(getFragmentPlan(sql), "FETCH");
+            String plan = getExecPlan(sql).getExplainString(StatementBase.ExplainLevel.LOGICAL);
+            assertContains(plan, "- FETCH");
+
+            sql = "select * from t0 where v1 in (1, 2, 3, 4)";
+            assertContains(getFragmentPlan(sql), "RAW_VALUES");
+            plan = getExecPlan(sql).getExplainString(StatementBase.ExplainLevel.LOGICAL);
+            assertContains(plan, "- RAW-VALUES");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(false);
+            connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(true);
+            connectContext.getSessionVariable().setLargeInPredicateThreshold(100000);
+        }
+    }
+
+    @Test
     public void testExplainUsesConfiguredDefaultLevel() throws Exception {
         String originalLevel = Config.query_explain_level;
         Config.query_explain_level = "LOGICAL";
