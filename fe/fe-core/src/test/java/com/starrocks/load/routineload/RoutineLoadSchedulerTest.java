@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -127,6 +128,21 @@ public class RoutineLoadSchedulerTest {
             } else {
                 Assertions.assertTrue(kafkaTaskInfo.getPartitions().contains(200));
             }
+        }
+    }
+
+    @Test
+    public void testIntervalFollowsConfig(@Injectable RoutineLoadMgr routineLoadManager) {
+        int originInterval = Config.routine_load_scheduler_interval_millisecond;
+        try {
+            RoutineLoadScheduler routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
+            Assertions.assertEquals(originInterval, routineLoadScheduler.getInterval());
+
+            Config.routine_load_scheduler_interval_millisecond = originInterval + 1000;
+            routineLoadScheduler.runAfterLeaseValid();
+            Assertions.assertEquals(originInterval + 1000, routineLoadScheduler.getInterval());
+        } finally {
+            Config.routine_load_scheduler_interval_millisecond = originInterval;
         }
     }
 

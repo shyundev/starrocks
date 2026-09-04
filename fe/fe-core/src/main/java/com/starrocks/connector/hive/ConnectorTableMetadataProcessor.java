@@ -102,6 +102,11 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        // update interval
+        if (getInterval() != Config.background_refresh_metadata_interval_millis) {
+            setInterval(Config.background_refresh_metadata_interval_millis);
+        }
+
         if (!Config.enable_hms_events_incremental_sync && Config.enable_background_refresh_resource_table_metadata) {
             refreshResourceHiveTable();
         }

@@ -39,6 +39,11 @@ public class PipeListener extends LeaderDaemon {
 
     @Override
     protected void runAfterLeaseValid() {
+        // update interval
+        if (getInterval() != Config.pipe_listener_interval_millis) {
+            setInterval(Config.pipe_listener_interval_millis);
+        }
+
         try {
             process();
         } catch (Throwable e) {

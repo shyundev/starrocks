@@ -67,6 +67,11 @@ public class RoutineLoadScheduler extends LeaderDaemon {
 
     @Override
     protected void runAfterLeaseValid() {
+        // update interval
+        if (getInterval() != Config.routine_load_scheduler_interval_millisecond) {
+            setInterval(Config.routine_load_scheduler_interval_millisecond);
+        }
+
         try {
             process();
         } catch (Throwable e) {

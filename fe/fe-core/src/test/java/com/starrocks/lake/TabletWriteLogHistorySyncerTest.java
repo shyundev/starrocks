@@ -16,6 +16,7 @@ package com.starrocks.lake;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -44,6 +45,23 @@ public class TabletWriteLogHistorySyncerTest {
     @BeforeEach
     public void setUp() {
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testIntervalFollowsConfig() {
+        long originInterval = Config.tablet_write_log_history_sync_interval_sec;
+        try {
+            TabletWriteLogHistorySyncer syncer = new TabletWriteLogHistorySyncer();
+            Assertions.assertEquals(originInterval * 1000L, syncer.getInterval());
+
+            FeConstants.runningUnitTest = true;
+            Config.tablet_write_log_history_sync_interval_sec = originInterval + 10;
+            syncer.runAfterLeaseValid();
+            Assertions.assertEquals((originInterval + 10) * 1000L, syncer.getInterval());
+        } finally {
+            Config.tablet_write_log_history_sync_interval_sec = originInterval;
+            FeConstants.runningUnitTest = false;
+        }
     }
 
     @Test
