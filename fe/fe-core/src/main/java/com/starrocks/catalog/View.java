@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.StarRocksException;
@@ -44,6 +45,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
@@ -124,7 +126,18 @@ public class View extends Table {
                     "is not a query statement", name), ErrorType.INTERNAL_ERROR);
         }
 
-        return (QueryStatement) node;
+        QueryStatement queryStatement = (QueryStatement) node;
+        if (isOlapView()) {
+            // The stored definition names a catalog only for external tables (TableName.toString), so a
+            // reference without one is an internal table whatever the session's current catalog is.
+            for (TableRelation tableRelation : AnalyzerUtils.collectTableRelations(queryStatement)) {
+                TableName tableName = tableRelation.getName();
+                if (Strings.isNullOrEmpty(tableName.getCatalog()) && !Strings.isNullOrEmpty(tableName.getDb())) {
+                    tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                }
+            }
+        }
+        return queryStatement;
     }
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {

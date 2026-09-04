@@ -17,7 +17,9 @@ package com.starrocks.catalog;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
@@ -26,6 +28,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
 import java.util.List;
 
 public class CreateViewTest extends StarRocksTestBase  {
@@ -262,6 +265,26 @@ public class CreateViewTest extends StarRocksTestBase  {
             Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_replace")).isSecurity());
         } finally {
             connectContext.getSessionVariable().setDefaultViewSqlSecurity(original);
+        }
+    }
+
+    @Test
+    public void testQueryViewFromExternalCatalogSession() throws Exception {
+        starRocksAssert.withTable("create table test.view_catalog_tbl (k1 int, v1 int) duplicate key(k1) " +
+                        "distributed by hash(k1) buckets 1 properties('replication_num' = '1')")
+                .withView("create view test.view_catalog_view as select k1, v1 from test.view_catalog_tbl")
+                .withCatalog("create external catalog view_catalog_ice properties('type' = 'iceberg', " +
+                        "'iceberg.catalog.type' = 'hadoop', 'iceberg.catalog.warehouse' = '" +
+                        Files.createTempDirectory("view_catalog_ice").toUri() + "')");
+        connectContext.setCurrentCatalog("view_catalog_ice");
+        connectContext.setDatabase("");
+        try {
+            QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                    "select k1, v1 from default_catalog.test.view_catalog_view", connectContext);
+            Analyzer.analyze(stmt, connectContext);
+        } finally {
+            connectContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            connectContext.setDatabase("test");
         }
     }
 }
