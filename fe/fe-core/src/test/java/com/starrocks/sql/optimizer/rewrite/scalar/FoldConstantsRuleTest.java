@@ -37,6 +37,7 @@ import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
@@ -210,6 +211,24 @@ public class FoldConstantsRuleTest {
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_FALSE, rule.apply(bpo10, null));
 
+    }
+
+    @Test
+    public void applyBinaryOnVarbinaryConstants() {
+        ConstantOperator a = ConstantOperator.createBinary(new byte[] {0x01, 0x02}, VarbinaryType.VARBINARY);
+        ConstantOperator sameAsA = ConstantOperator.createBinary(new byte[] {0x01, 0x02}, VarbinaryType.VARBINARY);
+        ConstantOperator highBit = ConstantOperator.createBinary(new byte[] {(byte) 0x80}, VarbinaryType.VARBINARY);
+
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.EQ, a, sameAsA), null));
+        assertEquals(OB_FALSE, rule.apply(new BinaryPredicateOperator(BinaryType.NE, a, sameAsA), null));
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, a, sameAsA), null));
+        // BE orders binary values with memcmp, so 0x80 sorts after 0x01 although it is negative as a Java byte
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.LT, a, highBit), null));
+        assertEquals(OB_FALSE, rule.apply(new BinaryPredicateOperator(BinaryType.GE, a, highBit), null));
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.GT, highBit, a), null));
+        assertEquals(OB_FALSE, rule.apply(new BinaryPredicateOperator(BinaryType.LE, highBit, a), null));
+        assertEquals(OB_TRUE, rule.apply(new InPredicateOperator(a, highBit, sameAsA), null));
+        assertEquals(OB_FALSE, rule.apply(new InPredicateOperator(true, a, highBit, sameAsA), null));
     }
 
     @Test

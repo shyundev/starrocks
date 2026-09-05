@@ -275,4 +275,19 @@ public class ConstantOperatorTest {
             Assertions.assertEquals(-10, var2.distance(var1));
         }
     }
+
+    @Test
+    public void testBinaryCompareByContent() {
+        ConstantOperator a = ConstantOperator.createBinary(new byte[] {0x01, 0x02}, VarbinaryType.VARBINARY);
+        ConstantOperator sameAsA = ConstantOperator.createBinary(new byte[] {0x01, 0x02}, VarbinaryType.VARBINARY);
+        ConstantOperator highBit = ConstantOperator.createBinary(new byte[] {(byte) 0x80}, VarbinaryType.VARBINARY);
+
+        Assertions.assertEquals(0, a.compareTo(sameAsA));
+        Assertions.assertEquals(a, sameAsA);
+        Assertions.assertEquals(a.hashCode(), sameAsA.hashCode());
+        // BE orders binary values with memcmp, so 0x80 sorts after 0x01 although it is negative as a Java byte
+        Assertions.assertTrue(a.compareTo(highBit) < 0);
+        Assertions.assertTrue(highBit.compareTo(a) > 0);
+        Assertions.assertNotEquals(a, highBit);
+    }
 }

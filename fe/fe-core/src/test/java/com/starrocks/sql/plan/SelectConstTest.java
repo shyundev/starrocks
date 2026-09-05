@@ -217,6 +217,11 @@ public class SelectConstTest extends PlanTestBase {
                 "78883632:00:00");
         assertFeExecuteResult("select timediff('1000-01-01 01:01:01.000001', '9999-01-02 01:01:01.123456')",
                 "-78883632:00:01");
+        assertFeExecuteResult("select x'0102' = x'0102'", "1");
+        assertFeExecuteResult("select x'0102' <> x'0102'", "0");
+        assertFeExecuteResult("select x'01' < x'80'", "1");
+        assertFeExecuteResult("select x'80' < x'01'", "0");
+        assertFeExecuteResult("select x'0102' in (x'80', x'0102')", "1");
     }
 
     @Test
