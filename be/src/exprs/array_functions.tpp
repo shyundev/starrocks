@@ -2627,10 +2627,18 @@ public:
         }
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-        const ColumnPtr& left_column = columns[0];
-        const ColumnPtr& right_column = columns[1];
-        bool is_const_left = left_column->is_constant();
-        bool is_const_right = right_column->is_constant();
+        // the state built in prepare() only covers arguments the planner marked constant, so a column that is
+        // constant for this chunk alone (e.g. if() returning its constant branch) is expanded like any other column
+        bool is_const_left = context->is_notnull_constant_column(0);
+        bool is_const_right = context->is_notnull_constant_column(1);
+        ColumnPtr left_column = columns[0];
+        ColumnPtr right_column = columns[1];
+        if (!is_const_left && left_column->is_constant()) {
+            left_column = ColumnHelper::unpack_and_duplicate_const_column(left_column->size(), left_column);
+        }
+        if (!is_const_right && right_column->is_constant()) {
+            right_column = ColumnHelper::unpack_and_duplicate_const_column(right_column->size(), right_column);
+        }
         [[maybe_unused]] auto* state =
                 reinterpret_cast<ArrayContainsAllState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 

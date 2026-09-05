@@ -897,6 +897,45 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_contains_all_chunk_local_const_argument) {
+    // array_contains_all([1,2,3], [1,2]) -> 1, array_contains_all([1], [1,2]) -> 0, array_contains_all([], [1,2]) -> 0
+    // where [1,2] is a const column the planner did not mark constant, so prepare() built no hash table
+    MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    array->append_datum(DatumArray{(int32_t)1, (int32_t)2, (int32_t)3});
+    array->append_datum(DatumArray{(int32_t)1});
+    array->append_datum(DatumArray{});
+
+    MutableColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    target->append_datum(DatumArray{(int32_t)1, (int32_t)2});
+    ColumnPtr const_target = ConstColumn::create(std::move(target), 3);
+
+    FunctionContext ctx;
+    {
+        auto result = ArrayFunctions::array_contains_all_specific<TYPE_INT>(&ctx, {array, const_target}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(0, result->get(2).get_int8());
+    }
+    // array_contains_all([1,2], [1,2,3]) -> 0, array_contains_all([1,2], [1]) -> 1, array_contains_all([1,2], []) -> 1
+    {
+        auto result = ArrayFunctions::array_contains_all_specific<TYPE_INT>(&ctx, {const_target, array}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(1, result->get(1).get_int8());
+        EXPECT_EQ(1, result->get(2).get_int8());
+    }
+    // array_contains_seq([1,2,3], [1,2]) -> 1, array_contains_seq([1], [1,2]) -> 0, array_contains_seq([], [1,2]) -> 0
+    {
+        auto result = ArrayFunctions::array_contains_seq_specific<TYPE_INT>(&ctx, {array, const_target}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(0, result->get(2).get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     // array_position([], 1) : 0
     {
