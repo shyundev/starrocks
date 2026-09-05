@@ -416,7 +416,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public int hashCodeSelf() {
-        return Objects.hash(value, type.getPrimitiveType(), isNull);
+        // value is a byte[] for binary types; deepHashCode/deepEquals hash and compare it by content
+        return Arrays.deepHashCode(new Object[] {value, type.getPrimitiveType(), isNull});
     }
 
     @Override
@@ -429,7 +430,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
         ConstantOperator that = (ConstantOperator) obj;
         return isNull == that.isNull &&
-                Objects.equals(value, that.value) &&
+                Objects.deepEquals(value, that.value) &&
                 type.matchesType(that.getType());
     }
 
@@ -483,6 +484,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return getDecimal().compareTo(o.getDecimal());
         } else if (t == PrimitiveType.CHAR || t == PrimitiveType.VARCHAR) {
             return getVarchar().compareTo(o.getVarchar());
+        } else if (t.isBinaryType()) {
+            // BE compares binary values with memcmp, i.e. as unsigned bytes
+            return Arrays.compareUnsigned(getBinary(), o.getBinary());
         }
 
         return -1;
