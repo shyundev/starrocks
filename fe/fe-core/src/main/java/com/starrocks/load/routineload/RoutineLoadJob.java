@@ -1916,7 +1916,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // double quote. Pairs with the parser's escapeBackSlash() so the emitted DDL parses back to
     // the original value. escapeJava is unsuitable here: it emits \\uXXXX for non-ASCII chars,
     // which escapeBackSlash() cannot decode, silently corrupting e.g. CJK jsonpaths.
-    private static String escapeForDoubleQuotedSql(String value) {
+    protected static String escapeForDoubleQuotedSql(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 

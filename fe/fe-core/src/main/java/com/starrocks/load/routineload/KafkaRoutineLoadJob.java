@@ -845,10 +845,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
         sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY).append("\"=\"");
-        sb.append(brokerList).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(brokerList)).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY).append("\"=\"");
-        sb.append(topic).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(topic)).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY).append("\"=\"");
         if (customeKafkaPartitionOffsets == null) {
@@ -888,7 +888,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
         if (confluentSchemaRegistryUrl != null) {
             sb.append("\"").append(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL).append("\"=\"");
-            sb.append(getPrintableConfluentSchemaRegistryUrl()).append("\",\n");
+            sb.append(escapeForDoubleQuotedSql(getPrintableConfluentSchemaRegistryUrl())).append("\",\n");
         }
 
         Map<String, String> maskedProperties = getMaskedCustomProperties();
@@ -901,7 +901,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             String key = entry.getKey();
             String value = entry.getValue();
             sb.append("\"").append("property.").append(key).append("\"=\"");
-            sb.append(value).append("\",\n");
+            sb.append(escapeForDoubleQuotedSql(value)).append("\",\n");
         }
         if (sb.length() >= 2) {
             sb.delete(sb.length() - 2, sb.length());

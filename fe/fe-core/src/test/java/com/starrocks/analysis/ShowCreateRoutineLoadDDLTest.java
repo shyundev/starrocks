@@ -117,6 +117,32 @@ public class ShowCreateRoutineLoadDDLTest {
     }
 
     @Test
+    public void testDataSourcePropertiesWithDoubleQuotesRoundTrip() {
+        // Kafka SASL settings carry double quotes inside the value.
+        String jaasConfig = "org.apache.kafka.common.security.plain.PlainLoginModule required "
+                + "username=\"user\" password=\"pa\\ss\";";
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "testJob", 10L, 20L, "127.0.0.1:9092", "topic1");
+        Map<String, String> customProperties = Deencapsulation.getField(job, "customProperties");
+        customProperties.put("sasl.jaas.config", jaasConfig);
+        customProperties.put("sasl.mechanism", "PLAIN");
+
+        String dataSourceSql = job.dataSourcePropertiesToSql();
+        Assertions.assertTrue(dataSourceSql.contains("username=\\\"user\\\" password=\\\"pa\\\\ss\\\";"),
+                dataSourceSql);
+
+        String ddl = "CREATE ROUTINE LOAD testDb.testJob ON testTbl PROPERTIES " + job.jobPropertiesToSql()
+                + "FROM KAFKA " + job.dataSourcePropertiesToSql();
+        List<StatementBase> stmts = SqlParser.parse(ddl, 32);
+        Assertions.assertEquals(1, stmts.size(), ddl);
+        CreateRoutineLoadStmt parsed = (CreateRoutineLoadStmt) stmts.get(0);
+        Map<String, String> dataSourceProperties = parsed.getDataSourceProperties();
+        Assertions.assertEquals(jaasConfig, dataSourceProperties.get("property.sasl.jaas.config"));
+        Assertions.assertEquals("PLAIN", dataSourceProperties.get("property.sasl.mechanism"));
+        Assertions.assertEquals("127.0.0.1:9092", dataSourceProperties.get(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY));
+        Assertions.assertEquals("topic1", dataSourceProperties.get(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY));
+    }
+
+    @Test
     public void testEmptyJsonPathsRoundTrip() {
         KafkaRoutineLoadJob job = jobWithProperties(Map.of(CreateRoutineLoadStmt.FORMAT, "json"));
 
