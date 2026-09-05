@@ -58,6 +58,32 @@ TEST_F(UtilityFunctionsTest, versionTest) {
     }
 }
 
+TEST_F(UtilityFunctionsTest, equiwidthBucketSignedArguments) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto make_columns = [](int64_t size, int64_t min, int64_t max, int64_t buckets) {
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_BIGINT>(size, 1));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_BIGINT>(min, 1));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_BIGINT>(max, 1));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_BIGINT>(buckets, 1));
+        return columns;
+    };
+
+    // a negative range is a valid range
+    {
+        auto result = UtilityFunctions::equiwidth_bucket(ctx, make_columns(0, -100, 100, 4));
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_EQ(2, ColumnHelper::cast_to<TYPE_BIGINT>(result.value())->get_data()[0]);
+    }
+    // a negative bucket count is rejected instead of wrapping around
+    {
+        auto result = UtilityFunctions::equiwidth_bucket(ctx, make_columns(5, 0, 10, -1));
+        ASSERT_FALSE(result.ok());
+    }
+}
+
 TEST_F(UtilityFunctionsTest, sleepTest) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
