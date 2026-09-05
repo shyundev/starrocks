@@ -817,6 +817,27 @@ TEST_F(TimeFunctionsTest, yearsDiffTest) {
             ASSERT_EQ(-1, v->get_data()[k]);
         }
     }
+
+    {
+        // less than a year apart within the same year, in both directions
+        Columns columns;
+
+        auto tc1 = TimestampColumn::create();
+        auto tc2 = TimestampColumn::create();
+        tc1->append(TimestampValue::create(2024, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2024, 6, 30, 0, 0, 0));
+        tc1->append(TimestampValue::create(2024, 6, 30, 0, 0, 0));
+        tc2->append(TimestampValue::create(2024, 1, 1, 0, 0, 0));
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        ColumnPtr result = TimeFunctions::years_diff(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+        ASSERT_EQ(0, v->get_data()[1]);
+    }
 }
 
 TEST_F(TimeFunctionsTest, monthsDiffTest) {
@@ -864,6 +885,27 @@ TEST_F(TimeFunctionsTest, monthsDiffTest) {
         for (int k = 0; k < 20; ++k) {
             ASSERT_EQ(13, v->get_data()[k]);
         }
+    }
+
+    {
+        // less than a month apart within the same month, in both directions
+        Columns columns;
+
+        auto tc1 = TimestampColumn::create();
+        auto tc2 = TimestampColumn::create();
+        tc1->append(TimestampValue::create(2024, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2024, 1, 31, 0, 0, 0));
+        tc1->append(TimestampValue::create(2024, 1, 31, 0, 0, 0));
+        tc2->append(TimestampValue::create(2024, 1, 1, 0, 0, 0));
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        ColumnPtr result = TimeFunctions::months_diff(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+        ASSERT_EQ(0, v->get_data()[1]);
     }
 }
 
