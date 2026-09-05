@@ -243,6 +243,11 @@ public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredi
         }
 
         public String visitCastOperator(CastOperator operator, Void context) {
+            // Stripping a non-identity cast can change predicate semantics and incorrectly prune files.
+            // Any non-identity cast that still reaches this converter must remain a residual predicate.
+            if (!operator.getType().equals(operator.getChild(0).getType())) {
+                return null;
+            }
             return operator.getChild(0).accept(this, context);
         }
     }

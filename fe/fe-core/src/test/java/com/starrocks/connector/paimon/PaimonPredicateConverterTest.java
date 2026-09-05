@@ -307,6 +307,7 @@ public class PaimonPredicateConverterTest {
 
     @Test
     public void testPaimonCastPredicate() {
+        // Identity casts are unwrapped. Non-identity casts must remain residual predicates.
         // double to int
         ConstantOperator doubleValue = ConstantOperator.createDouble(11.11);
         CastOperator cast0 = new CastOperator(IntegerType.INT, F0);
@@ -318,31 +319,23 @@ public class PaimonPredicateConverterTest {
         ConstantOperator string = ConstantOperator.createVarchar("2025-01-01");
         CastOperator cast1 = new CastOperator(com.starrocks.type.DateType.DATE, F1);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast1, string));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate1 = (LeafPredicate) result;
-        Assertions.assertEquals(BinaryString.fromString("2025-01-01"), leafPredicate1.literals().get(0));
+        Assertions.assertNull(result);
         // float to double
         ConstantOperator floatValue = ConstantOperator.createFloat(11.11);
         CastOperator cast2 = new CastOperator(com.starrocks.type.FloatType.DOUBLE, F2);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast2, floatValue));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate2 = (LeafPredicate) result;
-        Assertions.assertEquals(11.11, leafPredicate2.literals().get(0));
+        Assertions.assertNull(result);
         // date to string
         ConstantOperator date = ConstantOperator.createDate(
                 LocalDate.parse("2025-01-01").atTime(0, 0, 0, 0));
         CastOperator cast3 = new CastOperator(StringType.STRING, F3);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast3, date));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate3 = (LeafPredicate) result;
-        Assertions.assertEquals(20089, leafPredicate3.literals().get(0));
+        Assertions.assertNull(result);
         // bool to string
         ConstantOperator bool = ConstantOperator.createBoolean(true);
         CastOperator cast4 = new CastOperator(IntegerType.INT, F1);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast4, bool));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate4 = (LeafPredicate) result;
-        Assertions.assertEquals(BinaryString.fromString("1"), leafPredicate4.literals().get(0));
+        Assertions.assertNull(result);
         // bool to int
         ConstantOperator bool2 = ConstantOperator.createBoolean(false);
         CastOperator cast5 = new CastOperator(IntegerType.INT, F0);
@@ -390,16 +383,17 @@ public class PaimonPredicateConverterTest {
         ConstantOperator is = ConstantOperator.createInt(200);
         CastOperator cast11 = new CastOperator(IntegerType.BIGINT, F8);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast11, is));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate11 = (LeafPredicate) result;
-        Assertions.assertEquals((short) 200, leafPredicate11.literals().get(0));
+        Assertions.assertNull(result);
         // int to tinyint
         ConstantOperator it = ConstantOperator.createInt(10);
         CastOperator cast12 = new CastOperator(IntegerType.BIGINT, F9);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast12, it));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate12 = (LeafPredicate) result;
-        Assertions.assertEquals((byte) 10, leafPredicate12.literals().get(0));
+        Assertions.assertNull(result);
+        // DECIMAL 10.50 projects to BIGINT 10. Rewriting this as DECIMAL = 10 would prune matching files.
+        ConstantOperator ten = ConstantOperator.createBigint(10);
+        CastOperator cast13 = new CastOperator(IntegerType.BIGINT, F7);
+        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast13, ten));
+        Assertions.assertNull(result);
         // can not cast to decimal
         ConstantOperator d = ConstantOperator.createDouble(14.11);
         CastOperator cast99 = new CastOperator(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128, F7);
