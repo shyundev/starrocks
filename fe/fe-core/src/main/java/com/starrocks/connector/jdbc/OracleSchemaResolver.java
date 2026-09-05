@@ -32,6 +32,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static java.lang.Math.max;
@@ -85,6 +86,14 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
     @Override
     public ResultSet getColumns(Connection connection, String dbName, String tblName) throws SQLException {
         return connection.getMetaData().getColumns(connection.getCatalog(), dbName, tblName, "%");
+    }
+
+    @Override
+    protected String normalizeColumnName(String columnName) {
+        if (!columnName.equals(columnName.toUpperCase(Locale.ROOT))) {
+            return "\"" + columnName + "\"";
+        }
+        return columnName;
     }
 
     @Override
