@@ -174,7 +174,7 @@ public class IndexAnalyzer {
                     "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
-        lowerCasePropertyKeys(properties);
+        lowerCasePropertyKeys(properties, IndexDef.IndexType.GIN);
 
         if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {
             String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
@@ -204,8 +204,8 @@ public class IndexAnalyzer {
         addDefaultProperties(properties);
     }
 
-    // BE finds the GIN properties by exact lower-case key, so any other spelling must be folded before storing.
-    private static void lowerCasePropertyKeys(Map<String, String> properties) {
+    // BE finds the index properties by exact lower-case key, so any other spelling must be folded before storing.
+    private static void lowerCasePropertyKeys(Map<String, String> properties, IndexDef.IndexType indexType) {
         if (properties.keySet().stream().allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT)))) {
             return;
         }
@@ -213,7 +213,8 @@ public class IndexAnalyzer {
         for (Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey().toLowerCase(Locale.ROOT);
             if (lowerCased.containsKey(key)) {
-                throw new SemanticException("Duplicated index property for GIN after lower-casing the key: " + key);
+                throw new SemanticException("Duplicated index property for " + indexType.name()
+                        + " after lower-casing the key: " + key);
             }
             lowerCased.put(key, entry.getValue());
         }
@@ -537,6 +538,7 @@ public class IndexAnalyzer {
             throw new SemanticException("Ngram Bloom filter index only used in columns of DUP_KEYS/PRIMARY table or "
                     + "key columns of UNIQUE_KEYS/AGG_KEYS table. invalid column: " + column.getName());
         }
+        lowerCasePropertyKeys(properties, IndexDef.IndexType.NGRAMBF);
         analyzeBloomFilterFpp(properties);
         analyzeBloomFilterGramNum(properties);
         analyzeBloomFilterCaseSensitive(properties);
