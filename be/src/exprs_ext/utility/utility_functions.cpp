@@ -433,18 +433,19 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> builder(rows);
 
-    size_t min = viewer_min.value(0);
-    size_t max = viewer_max.value(0);
-    size_t buckets = viewer_buckets.value(0);
+    // the arguments are BIGINT and may be negative; an unsigned read wraps them and defeats the checks
+    int64_t min = viewer_min.value(0);
+    int64_t max = viewer_max.value(0);
+    int64_t buckets = viewer_buckets.value(0);
     RETURN_IF(min >= max, Status::InvalidArgument("requirement: min < max"));
     RETURN_IF(buckets <= 0, Status::InvalidArgument("requirement: buckets > 0"));
 
     for (size_t i = 0; i < rows; i++) {
-        size_t size = viewer_size.value(i);
+        int64_t size = viewer_size.value(i);
         RETURN_IF(size < min, Status::InvalidArgument("requirement: size >= min"));
         RETURN_IF(size > max, Status::InvalidArgument("requirement: size <= max"));
 
-        size_t bucket = (size - min) / std::max<size_t>(1, ((max - min) / buckets));
+        int64_t bucket = (size - min) / std::max<int64_t>(1, ((max - min) / buckets));
         builder.append(bucket);
     }
     return builder.build(false);
