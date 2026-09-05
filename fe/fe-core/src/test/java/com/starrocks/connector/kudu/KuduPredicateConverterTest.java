@@ -80,9 +80,16 @@ public class KuduPredicateConverterTest {
 
     @Test
     public void testEqCast() {
+        // A non-identity cast on the column must remain a residual predicate.
         ConstantOperator value = ConstantOperator.createVarchar("5");
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0_CAST, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
+        Assertions.assertTrue(result.isEmpty());
+
+        // An identity cast is safe to unwrap.
+        CastOperator identityCast = new CastOperator(IntegerType.INT, F0);
+        op = new BinaryPredicateOperator(BinaryType.EQ, identityCast, ConstantOperator.createInt(5));
+        result = CONVERTER.convert(op);
         Assertions.assertEquals(result.get(0).toString(), "`f0` = 5");
     }
 
