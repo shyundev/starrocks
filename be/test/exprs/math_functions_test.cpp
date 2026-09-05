@@ -973,6 +973,25 @@ TEST_F(VecMathFunctionsTest, LnTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, Log2Test) {
+    Columns columns;
+
+    auto tc1 = DoubleColumn::create();
+    tc1->append(0);
+    tc1->append(-0.0);
+    tc1->append(8.0);
+    tc1->append(-1);
+    columns.emplace_back(std::move(tc1));
+
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    ColumnPtr result = MathFunctions::log2(ctx.get(), columns).value();
+
+    ASSERT_EQ(true, result->is_null(0));
+    ASSERT_EQ(true, result->is_null(1));
+    ASSERT_EQ(3.0, result->get(2).get_double());
+    ASSERT_EQ(true, result->is_null(3));
+}
+
 TEST_F(VecMathFunctionsTest, ExpTest) {
     {
         Columns columns;
