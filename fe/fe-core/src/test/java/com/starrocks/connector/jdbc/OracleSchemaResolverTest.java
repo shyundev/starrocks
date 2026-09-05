@@ -41,6 +41,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class OracleSchemaResolverTest {
     private static final String ORACLE_TEMPORAL_TO_DATETIME_KEY = "oracle.temporal.to-datetime";
@@ -74,7 +75,7 @@ public class OracleSchemaResolverTest {
                 "TIMESTAMP(6) WITH LOCAL TIME ZONE", "TIMESTAMP(6) WITH TIME ZONE", "RAW"));
         columnResult.addColumn("COLUMN_SIZE", Arrays.asList(8, 16, 10, 10, 10, 4000, 4000, 8, 11, 11, 13, 2000));
         columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"));
+        columnResult.addColumn("COLUMN_NAME", Arrays.asList("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"));
         columnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "NO", "NO", "NO", "YES", "NO",
                 "NO", "NO", "NO", "YES", "YES", "YES"));
         properties = new HashMap<>();
@@ -174,6 +175,36 @@ public class OracleSchemaResolverTest {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testGetTableQuotesNonUpperCaseColumnNames() throws SQLException {
+        MockResultSet mixedCaseColumns = new MockResultSet("columns");
+        mixedCaseColumns.addColumn("DATA_TYPE", Arrays.asList(3, Types.VARCHAR, Types.VARCHAR));
+        mixedCaseColumns.addColumn("TYPE_NAME", Arrays.asList("NUMBER", "VARCHAR2", "VARCHAR2"));
+        mixedCaseColumns.addColumn("COLUMN_SIZE", Arrays.asList(10, 20, 20));
+        mixedCaseColumns.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0));
+        mixedCaseColumns.addColumn("COLUMN_NAME", Arrays.asList("ID", "comment", "Type"));
+        mixedCaseColumns.addColumn("IS_NULLABLE", Arrays.asList("NO", "YES", "YES"));
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getCatalog();
+                result = "t1";
+                minTimes = 0;
+
+                connection.getMetaData().getColumns("t1", "test", "tbl1", "%");
+                result = mixedCaseColumns;
+                minTimes = 0;
+            }
+        };
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertEquals(Arrays.asList("ID", "\"comment\"", "\"Type\""),
+                table.getFullSchema().stream().map(Column::getName).collect(Collectors.toList()));
     }
 
     @Test
