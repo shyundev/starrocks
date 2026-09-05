@@ -180,8 +180,19 @@ public class MinMaxMonotonicRewriteTest extends PlanTestBase {
 
         String sql1 = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, regularColumn);
         String expectedSql1 =
-                "select min(id) as min, max(id) as max from `default_catalog`.`test_db`.`test_table`[_META_];";
+                "select min(`id`) as min, max(`id`) as max from `default_catalog`.`test_db`.`test_table`[_META_];";
         assertEquals(expectedSql1, sql1);
+
+        // Test regular column whose name is not a plain identifier
+        Column specialNameColumn = mock(Column.class);
+        when(specialNameColumn.getName()).thenReturn("#os");
+        when(specialNameColumn.getType()).thenReturn(IntegerType.BIGINT);
+        when(specialNameColumn.getColumnId()).thenReturn(ColumnId.create("#os"));
+
+        String sqlSpecial = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, specialNameColumn);
+        String expectedSqlSpecial =
+                "select min(`#os`) as min, max(`#os`) as max from `default_catalog`.`test_db`.`test_table`[_META_];";
+        assertEquals(expectedSqlSpecial, sqlSpecial);
 
         // Test JSON column with BIGINT type
         Column jsonColumn = mock(Column.class);
