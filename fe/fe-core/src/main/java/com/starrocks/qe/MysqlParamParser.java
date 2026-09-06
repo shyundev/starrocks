@@ -45,6 +45,7 @@ public final class MysqlParamParser {
     public static LiteralExpr createLiteral(int mysqlTypeCode, ByteBuffer data) throws AnalysisException {
         switch (mysqlTypeCode) {
             case 0: // MYSQL_TYPE_DECIMAL
+            case 246: // MYSQL_TYPE_NEWDECIMAL
                 return new DecimalLiteral(readLengthEncodedString(data));
             case 1: // MYSQL_TYPE_TINY
                 return new IntLiteral(readIntegerValue(PrimitiveType.TINYINT, data), IntegerType.TINYINT);
