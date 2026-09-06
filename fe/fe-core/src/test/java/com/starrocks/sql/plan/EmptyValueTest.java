@@ -342,6 +342,32 @@ public class EmptyValueTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneEmptyExceptKeepsDistinct() throws Exception {
+        String sql = "select v1 from t0 except select v4 from t1 where false";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 7: v1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 7> : 1: v1");
+        assertNotContains(plan, "EXCEPT");
+
+        sql = "select v1, v2 from t0 except select v4, v5 from t1 where false except select v4, v5 from t1 where false";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 10: v1, 11: v2\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 10> : 1: v1\n" +
+                "  |  <slot 11> : 2: v2");
+        assertNotContains(plan, "EXCEPT");
+
+        sql = "select v_int, v_json from tjson except select v_int, v_json from tjson where false";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EXCEPT");
+    }
+
+    @Test
     public void testOuterPredicate() throws Exception {
         String sql = "select t0.v2 from t0 full outer join " +
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2" +

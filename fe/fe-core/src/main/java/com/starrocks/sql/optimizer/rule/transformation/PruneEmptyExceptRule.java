@@ -21,7 +21,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -41,9 +43,9 @@ case1:
    Empty  Child1  Child2
 
 case2:
-       Except
-      /      \     ->  Child1
-   Child1    Empty
+       Except              Aggregate
+      /      \     ->          |
+   Child1    Empty          Child1
  */
 public class PruneEmptyExceptRule extends TransformationRule {
     public PruneEmptyExceptRule() {
@@ -84,6 +86,10 @@ public class PruneEmptyExceptRule extends TransformationRule {
             return Lists.newArrayList(OptExpression
                     .create(new LogicalExceptOperator.Builder().withOperator(exceptOperator)
                             .setChildOutputColumns(childOutputs).build(), newInputs));
+        } else if (exceptOperator.getOutputColumnRefOp().stream().anyMatch(col -> !col.getType().canGroupBy())) {
+            // the aggregation added below groups by every output column, and GROUP BY does not accept
+            // every type an output column can have; the EXCEPT operator deduplicates those anyway
+            return Collections.emptyList();
         }
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
@@ -97,7 +103,11 @@ public class PruneEmptyExceptRule extends TransformationRule {
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
-        return Lists.newArrayList(OptExpression.create(projectOperator, newInputs));
+        // EXCEPT returns distinct rows, so the remaining child still has to be deduplicated
+        LogicalAggregationOperator distinctOperator = new LogicalAggregationOperator(AggType.GLOBAL,
+                exceptOperator.getOutputColumnRefOp(), Maps.newHashMap());
+        return Lists.newArrayList(OptExpression.create(distinctOperator,
+                OptExpression.create(projectOperator, newInputs)));
 
     }
 }

@@ -1,0 +1,46 @@
+-- name: test_except_empty_right_input
+create table `e1` (
+  `c0` int
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+create table `e2` (
+  `c0` int
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+insert into `e1` values (1), (1), (null), (null), (2), (null);
+-- result:
+-- !result
+select c0 from e1 except select c0 from e2 order by 1;
+-- result:
+None
+1
+2
+-- !result
+select c0 from e1 except select c0 from e2 where false order by 1;
+-- result:
+None
+1
+2
+-- !result
+create table `j1` (
+  `c0` int,
+  `data` json
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+insert into `j1` values (1, parse_json('{"a": 1}')), (1, parse_json('{"a": 1}')), (2, parse_json('{"a": 2}'));
+-- result:
+-- !result
+select c0, data from j1 except select c0, data from j1 where false order by 1;
+-- result:
+1	{"a": 1}
+2	{"a": 2}
+-- !result
