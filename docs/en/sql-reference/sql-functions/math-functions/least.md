@@ -45,6 +45,8 @@ LEAST(expr1,...);
 
 - DECIMAL128
 
+- DECIMAL256
+
 - DATETIME
 
 - VARCHAR

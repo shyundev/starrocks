@@ -245,6 +245,29 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testConditionalFunctionsOnDecimal256() throws Exception {
+        String d1 = "cast(v1 as decimal256(50,2))";
+        String d2 = "cast(v2 as decimal256(50,2))";
+        String sql = String.format("select coalesce(%s, %s), ifnull(%s, %s), nullif(%s, %s), "
+                + "if(v3 > 0, %s, %s), greatest(%s, %s), least(%s, %s) from t0",
+                d1, d2, d1, d2, d1, d2, d1, d2, d1, d2, d1, d2);
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "coalesce[([10: cast, DECIMAL256(50,2), true], [11: cast, DECIMAL256(50,2), true]); "
+                + "args: DECIMAL256; result: DECIMAL256(50,2)");
+        assertContains(plan, "ifnull[([10: cast, DECIMAL256(50,2), true], [11: cast, DECIMAL256(50,2), true]); "
+                + "args: DECIMAL256,DECIMAL256; result: DECIMAL256(50,2)");
+        assertContains(plan, "nullif[([10: cast, DECIMAL256(50,2), true], [11: cast, DECIMAL256(50,2), true]); "
+                + "args: DECIMAL256,DECIMAL256; result: DECIMAL256(50,2)");
+        assertContains(plan, "if[([3: v3, BIGINT, true] > 0, [10: cast, DECIMAL256(50,2), true], "
+                + "[11: cast, DECIMAL256(50,2), true]); args: BOOLEAN,DECIMAL256,DECIMAL256; "
+                + "result: DECIMAL256(50,2)");
+        assertContains(plan, "greatest[([10: cast, DECIMAL256(50,2), true], [11: cast, DECIMAL256(50,2), true]); "
+                + "args: DECIMAL256; result: DECIMAL256(50,2)");
+        assertContains(plan, "least[([10: cast, DECIMAL256(50,2), true], [11: cast, DECIMAL256(50,2), true]); "
+                + "args: DECIMAL256; result: DECIMAL256(50,2)");
+    }
+
+    @Test
     public void testTimestampArithmeticExpr() throws Exception {
         String sql = "select id_date + interval '3' month," +
                 "id_date + interval '1' day," +
