@@ -1,0 +1,26 @@
+-- name: test_except_empty_right_input
+-- EXCEPT is always distinct and the EXCEPT operator itself is what deduplicates, so pruning the
+-- operator away when the right input is empty at plan time has to keep the deduplication. An
+-- output column whose type GROUP BY does not accept keeps the operator instead, which is why the
+-- json case below is here.
+create table `e1` (
+  `c0` int
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+create table `e2` (
+  `c0` int
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+insert into `e1` values (1), (1), (null), (null), (2), (null);
+select c0 from e1 except select c0 from e2 order by 1;
+select c0 from e1 except select c0 from e2 where false order by 1;
+create table `j1` (
+  `c0` int,
+  `data` json
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+insert into `j1` values (1, parse_json('{"a": 1}')), (1, parse_json('{"a": 1}')), (2, parse_json('{"a": 2}'));
+select c0, data from j1 except select c0, data from j1 where false order by 1;
