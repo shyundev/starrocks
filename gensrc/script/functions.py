@@ -159,7 +159,9 @@ vectorized_functions = [
     [102870, "least", True, False, "DECIMAL32", ["DECIMAL32", "..."], "MathFunctions::least<TYPE_DECIMAL32>"],
     [102871, "least", True, False, "DECIMAL64", ["DECIMAL64", "..."], "MathFunctions::least<TYPE_DECIMAL64>"],
     [102872, "least", True, False, "DECIMAL128", ["DECIMAL128", "..."], "MathFunctions::least<TYPE_DECIMAL128>"],
+    [102873, "least", True, False, "DECIMAL256", ["DECIMAL256", "..."], "MathFunctions::least<TYPE_DECIMAL256>"],
     [10289, "least", True, False, "VARCHAR", ["VARCHAR", "..."], "MathFunctions::least<TYPE_VARCHAR>"],
+    [102874, "least", True, False, "VARBINARY", ["VARBINARY", "..."], "MathFunctions::least<TYPE_VARBINARY>"],
 
     [10298, "greatest", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::greatest<TYPE_DATETIME>"],
     [10290, "greatest", True, False, "TINYINT", ["TINYINT", "..."], "MathFunctions::greatest<TYPE_TINYINT>"],
@@ -173,7 +175,9 @@ vectorized_functions = [
     [102970, "greatest", True, False, "DECIMAL32", ["DECIMAL32", "..."], "MathFunctions::greatest<TYPE_DECIMAL32>"],
     [102971, "greatest", True, False, "DECIMAL64", ["DECIMAL64", "..."], "MathFunctions::greatest<TYPE_DECIMAL64>"],
     [102972, "greatest", True, False, "DECIMAL128", ["DECIMAL128", "..."], "MathFunctions::greatest<TYPE_DECIMAL128>"],
+    [102973, "greatest", True, False, "DECIMAL256", ["DECIMAL256", "..."], "MathFunctions::greatest<TYPE_DECIMAL256>"],
     [10299, "greatest", True, False, "VARCHAR", ["VARCHAR", "..."], "MathFunctions::greatest<TYPE_VARCHAR>"],
+    [102974, "greatest", True, False, "VARBINARY", ["VARBINARY", "..."], "MathFunctions::greatest<TYPE_VARBINARY>"],
 
     [10300, "rand", True, False, "DOUBLE", [], "MathFunctions::rand", "MathFunctions::rand_prepare",
      "MathFunctions::rand_close"],
@@ -738,6 +742,7 @@ vectorized_functions = [
     [701100, 'if', True, False, 'DECIMAL32', ['BOOLEAN', 'DECIMAL32', 'DECIMAL32'], 'nullptr'],
     [701101, 'if', True, False, 'DECIMAL64', ['BOOLEAN', 'DECIMAL64', 'DECIMAL64'], 'nullptr'],
     [701102, 'if', True, False, 'DECIMAL128', ['BOOLEAN', 'DECIMAL128', 'DECIMAL128'], 'nullptr'],
+    [701103, 'if', True, False, 'DECIMAL256', ['BOOLEAN', 'DECIMAL256', 'DECIMAL256'], 'nullptr'],
     [70111, 'if', True, False, 'VARCHAR', ['BOOLEAN', 'VARCHAR', 'VARCHAR'], 'nullptr'],
     [70112, 'if', True, False, 'BITMAP', ['BOOLEAN', 'BITMAP', 'BITMAP'], 'nullptr'],
     [70113, 'if', True, False, 'PERCENTILE', ['BOOLEAN', 'PERCENTILE', 'PERCENTILE'], 'nullptr'],
@@ -747,6 +752,7 @@ vectorized_functions = [
     [70117, 'if', True, False, 'ANY_MAP', ['BOOLEAN', 'ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70118, 'if', True, False, 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70119, 'if', True, False, 'JSON', ['BOOLEAN', 'JSON', 'JSON'], 'nullptr'],
+    [70120, 'if', True, False, 'VARBINARY', ['BOOLEAN', 'VARBINARY', 'VARBINARY'], 'nullptr'],
 
     [70200, 'ifnull', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -762,6 +768,7 @@ vectorized_functions = [
     [702100, 'ifnull', True, False, 'DECIMAL32', ['DECIMAL32', 'DECIMAL32'], 'nullptr'],
     [702101, 'ifnull', True, False, 'DECIMAL64', ['DECIMAL64', 'DECIMAL64'], 'nullptr'],
     [702102, 'ifnull', True, False, 'DECIMAL128', ['DECIMAL128', 'DECIMAL128'], 'nullptr'],
+    [702103, 'ifnull', True, False, 'DECIMAL256', ['DECIMAL256', 'DECIMAL256'], 'nullptr'],
     [70211, 'ifnull', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'nullptr'],
     [70212, 'ifnull', True, False, 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70213, 'ifnull', True, False, 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
@@ -771,6 +778,7 @@ vectorized_functions = [
     [70217, 'ifnull', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70218, 'ifnull', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70219, 'ifnull', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70220, 'ifnull', True, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'nullptr'],
 
     [70300, 'nullif', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -786,6 +794,7 @@ vectorized_functions = [
     [703100, 'nullif', True, False, 'DECIMAL32', ['DECIMAL32', 'DECIMAL32'], 'nullptr'],
     [703101, 'nullif', True, False, 'DECIMAL64', ['DECIMAL64', 'DECIMAL64'], 'nullptr'],
     [703102, 'nullif', True, False, 'DECIMAL128', ['DECIMAL128', 'DECIMAL128'], 'nullptr'],
+    [703103, 'nullif', True, False, 'DECIMAL256', ['DECIMAL256', 'DECIMAL256'], 'nullptr'],
     [70311, 'nullif', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'nullptr'],
     [70312, 'nullif', True, False, 'BITMAP', ['BITMAP', 'BITMAP'], 'nullptr'],
     [70313, 'nullif', True, False, 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
@@ -795,6 +804,7 @@ vectorized_functions = [
     [70317, 'nullif', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70318, 'nullif', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70319, 'nullif', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70320, 'nullif', True, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'nullptr'],
 
     [70400, 'coalesce', True, False, 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70409, 'coalesce', True, False, 'DATE', ['DATE', '...'], 'nullptr'],
@@ -810,6 +820,7 @@ vectorized_functions = [
     [704100, 'coalesce', True, False, 'DECIMAL32', ['DECIMAL32', '...'], 'nullptr'],
     [704101, 'coalesce', True, False, 'DECIMAL64', ['DECIMAL64', '...'], 'nullptr'],
     [704102, 'coalesce', True, False, 'DECIMAL128', ['DECIMAL128', '...'], 'nullptr'],
+    [704103, 'coalesce', True, False, 'DECIMAL256', ['DECIMAL256', '...'], 'nullptr'],
     [70411, 'coalesce', True, False, 'VARCHAR', ['VARCHAR', '...'], 'nullptr'],
     [70412, 'coalesce', True, False, 'BITMAP', ['BITMAP', '...'], 'nullptr'],
     [70413, 'coalesce', True, False, 'PERCENTILE', ['PERCENTILE', '...'], 'nullptr'],
@@ -819,6 +830,7 @@ vectorized_functions = [
     [70418, 'coalesce', True, False, 'ANY_MAP', ['ANY_MAP', '...'], 'nullptr'],
     [70419, 'coalesce', True, False, 'ANY_STRUCT', ['ANY_STRUCT', '...'], 'nullptr'],
     [70420, 'coalesce', True, False, 'JSON', ['JSON', '...'], 'nullptr'],
+    [70421, 'coalesce', True, False, 'VARBINARY', ['VARBINARY', '...'], 'nullptr'],
 
     [70415, 'esquery', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 

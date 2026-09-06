@@ -290,6 +290,59 @@ private:
     ColumnPtr _col;
 };
 
+TEST_F(VectorizedConditionExprTest, varbinary) {
+    expr_node.type = gen_type_desc(TPrimitiveType::VARBINARY);
+    TypeDescriptor type(TYPE_VARBINARY);
+
+    auto cond = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+    cond->append_datum(Datum((int8_t)1));
+    cond->append_datum(Datum((int8_t)0));
+    MockExpr cond_expr(TypeDescriptor(TYPE_BOOLEAN), cond);
+
+    auto lhs = ColumnHelper::create_column(type, true);
+    lhs->append_datum(Datum(Slice("\x01\x02", 2)));
+    lhs->append_datum(Datum());
+    MockExpr lhs_expr(type, lhs);
+
+    auto rhs = ColumnHelper::create_column(type, false);
+    rhs->append_datum(Datum(Slice("\x03", 1)));
+    rhs->append_datum(Datum(Slice("\x04\x05\x06", 3)));
+    MockExpr rhs_expr(type, rhs);
+
+    {
+        auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+        ASSERT_NE(nullptr, expr.get());
+        expr->_children = {&cond_expr, &lhs_expr, &rhs_expr};
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(Slice("\x01\x02", 2), ptr->get(0).get_slice());
+        ASSERT_EQ(Slice("\x04\x05\x06", 3), ptr->get(1).get_slice());
+    }
+    {
+        auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_null_expr(expr_node));
+        ASSERT_NE(nullptr, expr.get());
+        expr->_children = {&lhs_expr, &rhs_expr};
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(Slice("\x01\x02", 2), ptr->get(0).get_slice());
+        ASSERT_EQ(Slice("\x04\x05\x06", 3), ptr->get(1).get_slice());
+    }
+    {
+        auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_null_if_expr(expr_node));
+        ASSERT_NE(nullptr, expr.get());
+        expr->_children = {&lhs_expr, &rhs_expr};
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(Slice("\x01\x02", 2), ptr->get(0).get_slice());
+        ASSERT_TRUE(ptr->is_null(1));
+    }
+    {
+        auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+        ASSERT_NE(nullptr, expr.get());
+        expr->_children = {&lhs_expr, &rhs_expr};
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(Slice("\x01\x02", 2), ptr->get(0).get_slice());
+        ASSERT_EQ(Slice("\x04\x05\x06", 3), ptr->get(1).get_slice());
+    }
+}
+
 TEST_F(VectorizedConditionExprTest, ifExpr) {
     std::default_random_engine e;
 
