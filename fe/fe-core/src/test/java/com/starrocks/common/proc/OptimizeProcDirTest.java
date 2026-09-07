@@ -246,4 +246,12 @@ public class OptimizeProcDirTest {
         Assertions.assertEquals("10000", list1.get(9));
 
     }
+
+    @Test
+    public void testFetchResultByFilterOffsetPastEnd() throws AnalysisException {
+        BaseProcResult result = (BaseProcResult) optimizeProcDir.fetchResultByFilter(
+                null, null, new LimitElement(5, 1));
+        Assertions.assertTrue(result.getRows().isEmpty());
+    }
+
 }
