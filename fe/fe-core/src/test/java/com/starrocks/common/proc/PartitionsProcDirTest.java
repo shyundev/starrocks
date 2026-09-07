@@ -40,6 +40,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.VarcharType;
 import mockit.Mock;
@@ -354,4 +355,34 @@ public class PartitionsProcDirTest {
 
         Assertions.assertEquals("3", bucketsByPartitionId(result).get(String.valueOf(defaultPhysicalId)));
     }
+
+    @Test
+    public void testFetchResultByFilterLimitIsClampedToRows() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        olapTable.getIndexNameToMetaId().put("index1", 1000L);
+        for (long partitionId = 1025; partitionId < 1028; partitionId++) {
+            listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+            listPartition.setReplicationNum(partitionId, (short) 1);
+            MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+            olapTable.addPartition(new Partition(partitionId, partitionId + 10, "p" + partitionId, index,
+                    new RandomDistributionInfo(10)));
+        }
+        db.registerTableUnlocked(olapTable);
+        PartitionsProcDir dir = new PartitionsProcDir(db, olapTable, false);
+
+        // OFFSET past the end selects nothing instead of failing on subList(100, 3).
+        Assertions.assertEquals(0, dir.fetchResultByFilter(null, null, new LimitElement(100, 10)).getRows().size());
+        // begin + LIMIT must not overflow int.
+        Assertions.assertEquals(1,
+                dir.fetchResultByFilter(null, null, new LimitElement(2, Integer.MAX_VALUE)).getRows().size());
+        // A LIMIT above the int range must not be narrowed to 0.
+        Assertions.assertEquals(3,
+                dir.fetchResultByFilter(null, null, new LimitElement(0, 4294967296L)).getRows().size());
+        Assertions.assertEquals(1, dir.fetchResultByFilter(null, null, new LimitElement(1, 1)).getRows().size());
+    }
+
 }
