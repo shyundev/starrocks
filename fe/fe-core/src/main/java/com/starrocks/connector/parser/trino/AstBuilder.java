@@ -370,11 +370,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else {
                 queryRelation.setOrderBy(new ArrayList<>());
             }
-            queryRelation.setLimit((LimitElement) processOptional(node.getLimit(), context));
+            queryRelation.setLimit(visitLimitAndOffset(node.getLimit(), node.getOffset(), context));
         }
 
         // fetch
-        // offset
         // with
         List<CTERelation> withQuery = new ArrayList<>();
         if (node.getWith().isPresent()) {
@@ -435,16 +434,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             resultSelectRelation.setOrderBy(new ArrayList<>());
         }
 
-        LimitElement limitElement = (LimitElement) processOptional(node.getLimit(), context);
-        if (node.getOffset().isPresent()) {
+        resultSelectRelation.setLimit(visitLimitAndOffset(node.getLimit(), node.getOffset(), context));
+        return resultSelectRelation;
+    }
+
+    private LimitElement visitLimitAndOffset(Optional<Node> limit, Optional<Offset> offset, ParseTreeContext context) {
+        LimitElement limitElement = (LimitElement) processOptional(limit, context);
+        if (offset.isPresent()) {
             if (limitElement == null) {
                 throw unsupportedException("Trino Parser on StarRocks does not support OFFSET without LIMIT now");
             }
-            LimitElement offsetElement = (LimitElement) processOptional(node.getOffset(), context);
+            LimitElement offsetElement = (LimitElement) processOptional(offset, context);
             limitElement = new LimitElement(offsetElement.getOffset(), limitElement.getLimit());
         }
-        resultSelectRelation.setLimit(limitElement);
-        return resultSelectRelation;
+        return limitElement;
     }
 
     @Override
