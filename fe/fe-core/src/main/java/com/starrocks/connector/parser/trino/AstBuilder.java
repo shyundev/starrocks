@@ -665,6 +665,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else if (joinCriteria instanceof JoinUsing) {
                 usingColNames = ((JoinUsing) joinCriteria).getColumns().stream().map(Identifier::getValue).
                         collect(Collectors.toList());
+            } else {
+                throw unsupportedException("Trino Parser on StarRocks does not support NATURAL JOIN now");
             }
         }
         JoinRelation joinRelation = new JoinRelation(joinType, left, right, predicate, false);
