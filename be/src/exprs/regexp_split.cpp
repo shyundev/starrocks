@@ -16,6 +16,8 @@
 
 #include <re2/re2.h>
 
+#include "base/string/utf8.h"
+
 using namespace starrocks;
 
 namespace starrocks {
@@ -81,7 +83,7 @@ bool RegexpSplit::get(const char*& token_begin, const char*& token_end) {
             }
         }
 
-        _pos += 1;
+        _pos += std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<uint8_t>(*_pos)], _end - _pos);
         token_end = _pos;
         ++_splits;
     } else {
