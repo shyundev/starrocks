@@ -144,6 +144,27 @@ TEST(TypeConverterCoreTest, VarcharJsonRoundTrip) {
     EXPECT_EQ(R"({"a": 1})", string_dst->get_slice(0).to_string());
 }
 
+TEST(TypeConverterCoreTest, FloatToDoubleKeepsShortestRepresentation) {
+    const std::vector<float> values = {1e-10f, 1.17549435e-38f, 123456.789f, 0.1f, -1234.5678f, 1.2345f};
+    const std::vector<double> expected = {1e-10, 1.1754944e-38, 123456.79, 0.1, -1234.5677, 1.2345};
+    auto src = FloatColumn::create();
+    for (float v : values) {
+        src->append(v);
+    }
+
+    auto dst = DoubleColumn::create();
+    auto src_type = get_type_info(TYPE_FLOAT);
+    auto dst_type = get_type_info(TYPE_DOUBLE);
+    const TypeConverter* converter = get_type_converter(TYPE_FLOAT, TYPE_DOUBLE);
+    ASSERT_NE(nullptr, converter);
+
+    auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), nullptr);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+    for (size_t i = 0; i < values.size(); i++) {
+        EXPECT_EQ(expected[i], dst->get(i).get_double()) << "row " << i;
+    }
+}
+
 TEST(TypeConverterCoreTest, DecimalV3WideningConversion) {
     auto src = Decimal32Column::create(9, 2, 0);
     src->append_datum(Datum(static_cast<int32_t>(12345)));
