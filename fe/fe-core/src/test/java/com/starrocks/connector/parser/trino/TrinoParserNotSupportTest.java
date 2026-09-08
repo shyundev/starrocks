@@ -43,6 +43,13 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "Trino Parser on StarRocks does not support OFFSET without LIMIT now");
     }
 
+    // refer to https://trino.io/docs/current/sql/select.html#joins
+    @Test
+    public void testNaturalJoin() {
+        String sql = "select v1 from t0 natural join t1";
+        analyzeFail(sql, "Trino Parser on StarRocks does not support NATURAL JOIN now");
+    }
+
     // refer to https://trino.io/docs/current/sql/select.html#limit-or-fetch-first-clause
     @Test
     public void testLimitAll() {
