@@ -53,6 +53,26 @@ TEST_F(AddBinaryColumnTest, test_add_number) {
     ASSERT_EQ("['3.14']", column->debug_string());
 }
 
+TEST_F(AddBinaryColumnTest, test_add_number_followed_by_whitespace) {
+    auto column = BinaryColumn::create();
+    // Exactly as wide as the digits, so any whitespace kept from the token would also fail the length check.
+    TypeDescriptor t = TypeDescriptor::create_varchar_type(3);
+
+    simdjson::ondemand::parser parser;
+    auto json = "{ \"f_int\": 123\t ,\r\n  \"f_last\": 456\r\n}"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field("f_int");
+
+    auto st = add_binary_column(column.get(), t, "f_int", &val);
+    ASSERT_TRUE(st.ok()) << st;
+
+    val = doc.find_field("f_last");
+    st = add_binary_column(column.get(), t, "f_last", &val);
+    ASSERT_TRUE(st.ok()) << st;
+
+    ASSERT_EQ("['123', '456']", column->debug_string());
+}
+
 TEST_F(AddBinaryColumnTest, test_add_boolean) {
     auto column = BinaryColumn::create();
     TypeDescriptor t = TypeDescriptor::create_varchar_type(20);
