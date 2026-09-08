@@ -825,6 +825,9 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select v1 from t0 order by v1 offset 2 limit 20";
         assertPlanContains(sql, "offset: 2", "limit: 20");
+
+        sql = "select v1 from t0 union all select v4 from t1 order by v1 offset 2 limit 20";
+        assertPlanContains(sql, "offset: 2", "limit: 20");
     }
 
     @Test
