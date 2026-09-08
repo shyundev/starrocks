@@ -178,8 +178,9 @@ public class TypeParser {
             // Integer types
             case "TINYINT" -> IntegerType.TINYINT;
             case "SMALLINT" -> IntegerType.SMALLINT;
-            case "INTEGER", "UNSIGNED", "INT" -> IntegerType.INT;
-            case "BIGINT" -> IntegerType.BIGINT;
+            case "INTEGER", "INT" -> IntegerType.INT;
+            // Align with MySQL semantics: CAST(... AS UNSIGNED) returns a 64-bit integer, like SIGNED above.
+            case "BIGINT", "UNSIGNED" -> IntegerType.BIGINT;
             case "LARGEINT" -> IntegerType.LARGEINT;
 
             // Float types
