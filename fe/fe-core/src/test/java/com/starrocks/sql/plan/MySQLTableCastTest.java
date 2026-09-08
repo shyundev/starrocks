@@ -69,6 +69,11 @@ public class MySQLTableCastTest extends PlanTestBase {
         sqls.add(Pair.create("select cast(2147483648 as signed)", "<slot 2> : 2147483648"));
         sqls.add(Pair.create("select cast(1 as signed integer)", "<slot 2> : 1"));
 
+        // MySQL-compatible UNSIGNED cast should return BIGINT as well.
+        sqls.add(Pair.create("select cast(2147483648 as unsigned)", "<slot 2> : 2147483648"));
+        sqls.add(Pair.create("select cast(9223372036854775807 as unsigned)", "<slot 2> : 9223372036854775807"));
+        sqls.add(Pair.create("select cast(1 as unsigned integer)", "<slot 2> : 1"));
+
         return sqls.stream().map(e -> Arguments.of(e));
     }
 
