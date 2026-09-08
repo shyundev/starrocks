@@ -1395,6 +1395,40 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_naive_preserves_wall_cl
     }
 }
 
+// A tick before the epoch splits into a truncated second and a negative sub-second remainder, so the
+// converter has to borrow one second to keep the fraction in [0, 1s).
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_before_epoch_keeps_sub_second) {
+    struct Case {
+        arrow::TimeUnit::type unit;
+        int64_t raw;
+        TimestampValue expected;
+    };
+    const std::vector<Case> cases = {
+            {arrow::TimeUnit::MILLI, -1, TimestampValue::create(1969, 12, 31, 23, 59, 59, 999000)},
+            {arrow::TimeUnit::MICRO, -1, TimestampValue::create(1969, 12, 31, 23, 59, 59, 999999)},
+            {arrow::TimeUnit::NANO, -1, TimestampValue::create(1969, 12, 31, 23, 59, 59, 999999)},
+            {arrow::TimeUnit::MILLI, -2208988799500, TimestampValue::create(1900, 1, 1, 0, 0, 0, 500000)},
+            {arrow::TimeUnit::MICRO, -2208988799500000, TimestampValue::create(1900, 1, 1, 0, 0, 0, 500000)},
+            {arrow::TimeUnit::NANO, -2208988799500000000, TimestampValue::create(1900, 1, 1, 0, 0, 0, 500000)},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE("unit=" + std::to_string(static_cast<int>(c.unit)) + " raw=" + std::to_string(c.raw));
+        auto type = std::make_shared<arrow::TimestampType>(c.unit, "UTC");
+        size_t counter = 0;
+        auto array = create_constant_datetime_array<arrow::TimestampType, false>(1, c.raw, type, counter);
+        ConvertFuncTree cf(get_arrow_converter(ArrowTypeId::TIMESTAMP, TYPE_DATETIME, false, false));
+        ASSERT_TRUE(cf.func != nullptr);
+
+        ArrowConvertContext ctx;
+        ctx.timezone = "UTC";
+        auto column = TimestampColumn::create();
+        Filter filter(1, 1);
+        ASSERT_STATUS_OK(
+                convert_arrow_array_to_column(&cf, array->length(), array.get(), column.get(), 0, 0, &filter, &ctx));
+        ASSERT_EQ(column->get_data()[0], c.expected);
+    }
+}
+
 template <bool is_nullable>
 std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
                                                          const std::shared_ptr<arrow::Decimal128Type>& type,

@@ -733,6 +733,18 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         }
     }
 
+    // Truncating division leaves a negative remainder for a tick before the epoch, and from_unixtime
+    // stores the sub-second part as given. Borrow a whole second so the remainder stays in
+    // [0, ticks_per_second), the same floor split the parquet column converter uses.
+    static void split_seconds(int64_t ticks, int64_t ticks_per_second, int64_t* seconds, int64_t* remainder) {
+        *seconds = ticks / ticks_per_second;
+        *remainder = ticks % ticks_per_second;
+        if (*remainder < 0) {
+            *seconds -= 1;
+            *remainder += ticks_per_second;
+        }
+    }
+
     static Status convert_datetime_from_second(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
         for (int i = 0; i < num_elements; ++i) {
@@ -759,7 +771,10 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, ctz)) {
+            int64_t seconds;
+            int64_t milliseconds;
+            split_seconds(arrow_data[i], 1000, &seconds, &milliseconds);
+            if (convert_one_datetime(data[i], seconds, milliseconds * 1000, ctz)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -776,7 +791,10 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, ctz)) {
+            int64_t seconds;
+            int64_t microseconds;
+            split_seconds(arrow_data[i], 1000000, &seconds, &microseconds);
+            if (convert_one_datetime(data[i], seconds, microseconds, ctz)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -793,7 +811,10 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000, ctz)) {
+            int64_t seconds;
+            int64_t nanoseconds;
+            split_seconds(arrow_data[i], 1000000000, &seconds, &nanoseconds);
+            if (convert_one_datetime(data[i], seconds, nanoseconds / 1000, ctz)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
