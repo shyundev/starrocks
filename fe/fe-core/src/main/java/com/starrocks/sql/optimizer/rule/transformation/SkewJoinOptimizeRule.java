@@ -452,7 +452,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         java.util.function.Function.identity()));
         int skewRandRange = context.getSessionVariable().getSkewJoinRandRange();
 
-        Map<ColumnRefOperator, ScalarOperator> generateSeriesChildProjectMap = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> generateSeriesChildProjectMap = Maps.newLinkedHashMap();
         generateSeriesChildProjectMap.put(columnRefFactory.create("0", IntegerType.BIGINT, false),
                 ConstantOperator.createBigint(0));
         generateSeriesChildProjectMap.put(columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false),
