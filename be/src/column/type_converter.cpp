@@ -23,6 +23,7 @@
 #include "base/hash/unaligned_access.h"
 #include "base/string/string_parser.hpp"
 #include "column/type_converter_detail.h"
+#include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
 #include "types/datetime_value.h"
 #include "types/decimalv3.h"
@@ -418,10 +419,10 @@ public:
             dst->set_null();
             return Status::OK();
         }
-        char buf[64] = {0};
-        snprintf(buf, 64, "%f", src.get_float());
-        char* tg;
-        dst->set_double(strtod(buf, &tg));
+        // Shortest round-trip text of the float, the same form FLOAT renders to.
+        char buf[kFloatToBufferSize];
+        FloatToBuffer(src.get_float(), buf);
+        dst->set_double(strtod(buf, nullptr));
         return Status::OK();
     }
 };
