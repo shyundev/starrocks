@@ -161,6 +161,39 @@ TEST_F(ParquetSchemaBuilderTest, UnsignedInt32Widening) {
     }
 }
 
+// Test unsigned INT64 widening for FILES schema inference
+TEST_F(ParquetSchemaBuilderTest, UnsignedInt64Widening) {
+    TypeDescriptor type_desc;
+    Status st;
+
+    // UINT_64 -> LARGEINT (max 2^64 - 1 > BIGINT max)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("u64", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::Int(64, /*is_signed=*/false),
+                                                           ::parquet::Type::INT64);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_LARGEINT, type_desc.type);
+    }
+    // Signed INT_64 -> BIGINT (unchanged)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("i64", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::Int(64, /*is_signed=*/true),
+                                                           ::parquet::Type::INT64);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_BIGINT, type_desc.type);
+    }
+    // Legacy converted-type UINT_64 (no logical type set) -> LARGEINT
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("u64_legacy", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::Type::INT64, ::parquet::ConvertedType::UINT_64);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_LARGEINT, type_desc.type);
+    }
+}
+
 // Test FIXED_LEN_BYTE_ARRAY schema inference
 TEST_F(ParquetSchemaBuilderTest, FixedLenByteArrayTypes) {
     TypeDescriptor type_desc;

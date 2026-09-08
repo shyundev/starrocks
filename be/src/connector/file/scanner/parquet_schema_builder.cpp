@@ -96,7 +96,14 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         break;
     case parquet::Type::INT64:
         if (logical_type->is_int()) {
-            *type_desc = TypeDescriptor(TYPE_BIGINT);
+            auto int_logical_type = std::dynamic_pointer_cast<const parquet::IntLogicalType>(logical_type);
+            if (int_logical_type != nullptr && !int_logical_type->is_signed()) {
+                // An unsigned INT64 value above 2^63 does not fit BIGINT; LARGEINT holds the full range
+                // and the load path already converts UINT64 into it.
+                *type_desc = TypeDescriptor(TYPE_LARGEINT);
+            } else {
+                *type_desc = TypeDescriptor(TYPE_BIGINT);
+            }
         } else if (logical_type->is_time()) {
             *type_desc = TypeDescriptor(TYPE_TIME);
         } else if (logical_type->is_timestamp()) {
