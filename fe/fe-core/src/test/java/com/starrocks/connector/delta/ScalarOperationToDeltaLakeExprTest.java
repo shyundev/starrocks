@@ -17,6 +17,7 @@ package com.starrocks.connector.delta;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -254,6 +255,27 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE.toString(), convertExpr.toString());
+    }
+
+    @Test
+    public void testConvertCastColumnPredicate() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+        ConstantOperator value = ConstantOperator.createBigint(5);
+
+        // A non-identity cast on the column must remain a residual predicate.
+        CastOperator cast = new CastOperator(com.starrocks.type.IntegerType.BIGINT, cIntCol);
+        ScalarOperator operator = new BinaryPredicateOperator(BinaryType.EQ, cast, value);
+        Predicate convertExpr = converter.convert(new ArrayList<>(List.of(operator)), context);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE.toString(), convertExpr.toString());
+
+        // An identity cast is safe to unwrap.
+        cast = new CastOperator(com.starrocks.type.IntegerType.INT, cIntCol);
+        operator = new BinaryPredicateOperator(BinaryType.EQ, cast, value);
+        convertExpr = converter.convert(new ArrayList<>(List.of(operator)), context);
+        Predicate expectedExpr = new Predicate("=", cDeltaIntCol, Literal.ofLong(5));
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
     }
 
     @Test
