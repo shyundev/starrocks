@@ -18,6 +18,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.Histogram;
@@ -35,6 +37,8 @@ import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SkewJoinTest extends PlanTestBase {
@@ -94,6 +98,51 @@ public class SkewJoinTest extends PlanTestBase {
         }
         connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(false);
         PlanTestBase.afterClass();
+    }
+
+    @Test
+    public void testSkewJoinSaltTableRangeArgumentOrder() throws Exception {
+        // The salt table is unnest(skew values) joined with generate_series(0, range). Its two
+        // parameters must stay in that order whatever column ids the query happens to allocate,
+        // so try tables of several widths.
+        for (int width = 1; width <= 6; width++) {
+            StringBuilder columns = new StringBuilder();
+            for (int i = 0; i < width; i++) {
+                columns.append(i == 0 ? "" : ", ").append("c").append(i).append(" INT");
+            }
+            String left = "skew_salt_l" + width;
+            String right = "skew_salt_r" + width;
+            starRocksAssert.withTable("create table " + left + " (" + columns + ") duplicate key(c0) " +
+                    "distributed by hash(c0) buckets 1 properties('replication_num' = '1')");
+            starRocksAssert.withTable("create table " + right + " (" + columns + ") duplicate key(c0) " +
+                    "distributed by hash(c0) buckets 1 properties('replication_num' = '1')");
+
+            String sql = "select count(*) from " + left + " join [skew|" + left + ".c0(1)] " + right +
+                    " on " + left + ".c0 = " + right + ".c0";
+            OptExpression root = getExecPlan(sql).getPhysicalPlan();
+            PhysicalTableFunctionOperator generateSeries = findTableFunction(root, "generate_series");
+            assertNotNull(generateSeries, sql);
+            List<String> params = generateSeries.getFnParamColumnRefs().stream()
+                    .map(c -> c.getName()).collect(java.util.stream.Collectors.toList());
+            assertEquals(List.of("0", String.valueOf(connectContext.getSessionVariable().getSkewJoinRandRange())),
+                    params, sql);
+        }
+    }
+
+    private static PhysicalTableFunctionOperator findTableFunction(OptExpression root, String fnName) {
+        if (root.getOp() instanceof PhysicalTableFunctionOperator) {
+            PhysicalTableFunctionOperator op = (PhysicalTableFunctionOperator) root.getOp();
+            if (op.getFn().functionName().equalsIgnoreCase(fnName)) {
+                return op;
+            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            PhysicalTableFunctionOperator found = findTableFunction(child, fnName);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     @Test
