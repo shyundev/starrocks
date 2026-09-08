@@ -27,6 +27,8 @@ namespace starrocks {
 static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDescriptor& type_desc,
                                             std::string_view name, simdjson::ondemand::value* value) {
     std::string_view sv = value->raw_json_token();
+    // raw_json_token() also spans the whitespace between the number and the next token.
+    sv = sv.substr(0, sv.find_last_not_of(" \t\r\n") + 1);
 
     if (type_desc.len < sv.size()) {
         auto err_msg =
