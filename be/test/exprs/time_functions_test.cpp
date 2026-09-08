@@ -4925,6 +4925,33 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
     }
 }
 
+TEST_F(TimeFunctionsTest, timeFormatTest) {
+    auto time_value = ColumnHelper::create_column(TypeDescriptor(TYPE_TIME), false);
+    time_value->append_datum(Datum(double(19 * 3600 + 30 * 60 + 10)));
+    time_value->append_datum(Datum(double(0)));
+    time_value->append_datum(Datum(double(838 * 3600 + 59 * 60 + 59)));
+    time_value->append_datum(Datum(double(-(1 * 3600 + 2 * 60 + 3))));
+
+    auto format = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+    format->append_datum(Datum(Slice("%H:%i:%s %p")));
+    format->append_datum(Datum(Slice("%h:%i:%s %p")));
+    format->append_datum(Datum(Slice("%H:%i:%s")));
+    format->append_datum(Datum(Slice("%H:%i:%s")));
+
+    Columns columns;
+    columns.emplace_back(time_value);
+    columns.emplace_back(format);
+
+    ColumnPtr result = TimeFunctions::time_format(_utils->get_fn_ctx(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    EXPECT_EQ(4, result->size());
+    EXPECT_EQ("19:30:10 PM", v->get_slice(0).to_string());
+    EXPECT_EQ("12:00:00 AM", v->get_slice(1).to_string());
+    EXPECT_EQ("838:59:59", v->get_slice(2).to_string());
+    EXPECT_EQ("-01:02:03", v->get_slice(3).to_string());
+}
+
 // Tests for sec_to_time function
 TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
