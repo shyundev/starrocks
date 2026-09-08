@@ -50,7 +50,7 @@ TEST_F(GinFunctionsTest, tokenizeTest) {
         tokenizer->append("english");
         content->append("hello world");
         columns.emplace_back(ConstColumn::create(tokenizer));
-        columns.emplace_back(ConstColumn::create(content));
+        columns.emplace_back(ConstColumn::create(content, 1));
         ctx->set_constant_columns(columns);
         ASSERT_TRUE(GinFunctions::tokenize_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
         ColumnPtr result = GinFunctions::tokenize(ctx.get(), columns).value();
@@ -62,6 +62,33 @@ TEST_F(GinFunctionsTest, tokenizeTest) {
 
         auto res_array = v->get(0).get_array();
 
+        ASSERT_EQ("hello", res_array[0].get_slice().to_string());
+        ASSERT_EQ("world", res_array[1].get_slice().to_string());
+    }
+}
+
+TEST_F(GinFunctionsTest, tokenizeConstContentKeepsRowCount) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    auto tokenizer = BinaryColumn::create();
+    auto content = BinaryColumn::create();
+
+    tokenizer->append("english");
+    content->append("hello world");
+    columns.emplace_back(ConstColumn::create(tokenizer, 3));
+    columns.emplace_back(ConstColumn::create(content, 3));
+    ctx->set_constant_columns(columns);
+    ASSERT_TRUE(GinFunctions::tokenize_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ColumnPtr result = GinFunctions::tokenize(ctx.get(), columns).value();
+    ASSERT_TRUE(GinFunctions::tokenize_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ASSERT_EQ(3, result->size());
+    auto nullable_result = ColumnHelper::as_column<NullableColumn>(result);
+    auto v = ColumnHelper::as_column<ArrayColumn>(nullable_result->data_column());
+    for (size_t i = 0; i < 3; i++) {
+        auto res_array = v->get(i).get_array();
+        ASSERT_EQ(2, res_array.size());
         ASSERT_EQ("hello", res_array[0].get_slice().to_string());
         ASSERT_EQ("world", res_array[1].get_slice().to_string());
     }

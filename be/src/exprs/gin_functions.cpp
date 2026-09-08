@@ -101,7 +101,7 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
     auto* analyzer = ts->analyzer;
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(columns[1]);
-    size_t num_rows = value_viewer.size();
+    size_t num_rows = columns[1]->size();
 
     // Array Offset
     int offset = 0;
