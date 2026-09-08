@@ -3974,19 +3974,17 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
             continue;
         }
 
-        TimestampValue time_val;
-        time_val.set_timestamp(time_viewer.value(i));
         std::string_view format_str = format_viewer.value(i);
 
-        // Convert TimeValue to hours, minutes, seconds
-        int year;
-        int month;
-        int day;
-        int hours;
-        int minutes;
-        int seconds;
-        int microseconds;
-        time_val.to_timestamp(&year, &month, &day, &hours, &minutes, &seconds, &microseconds);
+        // A TIME value is a count of seconds, so split it into hours, minutes and seconds
+        // directly; a negative value keeps its sign in front of the hours as MySQL prints it.
+        auto total_seconds = static_cast<int64_t>(time_viewer.value(i));
+        bool negative = total_seconds < 0;
+        int64_t abs_seconds = negative ? -total_seconds : total_seconds;
+        int hours = static_cast<int>(abs_seconds / 3600);
+        int minutes = static_cast<int>(abs_seconds % 3600 / 60);
+        int seconds = static_cast<int>(abs_seconds % 60);
+        int microseconds = 0;
 
         std::stringstream result;
         bool in_format = false;
@@ -4006,7 +4004,7 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
             in_format = false;
             switch (c) {
             case 'H': // Hour (00-23)
-                result << std::setfill('0') << std::setw(2) << hours;
+                result << (negative ? "-" : "") << std::setfill('0') << std::setw(2) << hours;
                 break;
             case 'h': // Hour (01-12)
                 result << std::setfill('0') << std::setw(2) << (((hours % 12) == 0) ? 12 : (hours % 12));
