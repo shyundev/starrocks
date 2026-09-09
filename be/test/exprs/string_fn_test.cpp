@@ -655,6 +655,93 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, splitChunkLocalConstArguments) {
+    /// constant delimiter that is not a planner constant.
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        str->append("a,b,c");
+        str->append("x,y");
+        str->append("p,q,r,s");
+
+        auto delim_const = ConstColumn::create(BinaryColumn::create());
+        delim_const->append_datum(",");
+
+        columns.emplace_back(str);
+        columns.emplace_back(delim_const);
+        ASSERT_TRUE(
+                StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+        ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_EQ("[['a','b','c'], ['x','y'], ['p','q','r','s']]", col_array->debug_string());
+    }
+
+    /// constant source and constant delimiter, neither of them a planner constant.
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+
+        auto str_data = BinaryColumn::create();
+        str_data->append("a,b,c");
+        auto delim_data = BinaryColumn::create();
+        delim_data->append(",");
+
+        columns.emplace_back(ConstColumn::create(std::move(str_data), 3));
+        columns.emplace_back(ConstColumn::create(std::move(delim_data), 3));
+        ASSERT_TRUE(
+                StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+        ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_EQ("[['a','b','c'], ['a','b','c'], ['a','b','c']]", col_array->debug_string());
+    }
+
+    /// constant source that is not a planner constant, planner-constant empty delimiter.
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+
+        auto chars_data = BinaryColumn::create();
+        chars_data->append("abc");
+        auto empty_delim = ConstColumn::create(BinaryColumn::create());
+        empty_delim->append_datum("");
+
+        columns.emplace_back(ConstColumn::create(std::move(chars_data), 3));
+        columns.emplace_back(empty_delim);
+        ctx->set_constant_columns({nullptr, empty_delim});
+        ASSERT_TRUE(
+                StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+        ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_EQ("[['a','b','c'], ['a','b','c'], ['a','b','c']]", col_array->debug_string());
+    }
+
+    /// constant source that is not a planner constant, planner-constant delimiter.
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+
+        auto str_data = BinaryColumn::create();
+        str_data->append("a,b,c");
+        auto delim_const = ConstColumn::create(BinaryColumn::create());
+        delim_const->append_datum(",");
+
+        columns.emplace_back(ConstColumn::create(std::move(str_data), 3));
+        columns.emplace_back(delim_const);
+        ctx->set_constant_columns({nullptr, delim_const});
+        ASSERT_TRUE(
+                StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+        ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_EQ("[['a','b','c'], ['a','b','c'], ['a','b','c']]", col_array->debug_string());
+    }
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
     /// non-constant source and delimiter.
     {
