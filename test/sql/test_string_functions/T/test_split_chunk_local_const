@@ -1,0 +1,38 @@
+-- name: test_split_chunk_local_const @sequential
+-- description: split() took its constant-delimiter fast path on any ConstColumn, including one an
+--              if()/case produces at run time when every row of the chunk takes the same literal
+--              branch. split_prepare fills the delimiter state only for a planner constant, so the
+--              path split into single characters instead of on the delimiter, and its single-range
+--              copy of the input read past a constant input's one stored value. str_to_map runs
+--              split on its first delimiter and showed both.
+
+CREATE DATABASE IF NOT EXISTS test_split_chunk_local_const_db;
+USE test_split_chunk_local_const_db;
+
+CREATE TABLE t (
+  id INT,
+  s VARCHAR(65533),
+  m VARCHAR(65533)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t VALUES (1, 'a,b,c', 'a=1,b=2'), (2, 'x,y', 'k=v'), (3, '', ''), (4, NULL, NULL);
+
+-- Literal delimiter, for reference.
+SELECT id, split(s, ',') FROM t ORDER BY id;
+
+-- Delimiter constant only within the chunk.
+SELECT id, split(s, if(id <> 0, ',', ';')) FROM t ORDER BY id;
+SELECT id, str_to_map(m, if(id <> 0, ',', ';'), '=') FROM t ORDER BY id;
+
+-- Constant input with a delimiter that is constant only within the chunk.
+SELECT id, split('a::b::c', if(id <> 0, '::', ';')) FROM t ORDER BY id;
+
+-- Input constant only within the chunk, planner-constant empty delimiter.
+SELECT id, split(if(id <> 0, 'abc', 'x'), '') FROM t ORDER BY id;
+SELECT id, str_to_map(if(id <> 0, 'a=1', 'x'), '', '=') FROM t ORDER BY id;
+
+-- Input constant only within the chunk, planner-constant delimiter.
+SELECT id, split(if(id <> 0, 'a,b,c', 'x'), ',') FROM t ORDER BY id;

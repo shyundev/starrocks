@@ -131,7 +131,9 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
         return ArrayColumn::create(
                 NullableColumn::create(std::move(array_binary_column), NullColumn::create(offset, 0)),
                 std::move(array_offsets));
-    } else if (columns[1]->is_constant()) {
+    } else if (context->is_notnull_constant_column(1)) {
+        // split_prepare fills the delimiter state only for a planner-constant delimiter, so this path takes the
+        // same check. A delimiter that is constant only within the chunk goes through the per-row path below.
         Slice delimiter = state->delimiter;
 
         if (delimiter.size == 0) { // split each character
@@ -154,7 +156,12 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             }
             array_offsets->append(offset);
 
-            array_binary_column->append_continuous_strings(v.data(), v.size());
+            if (columns[0]->is_constant()) {
+                // Every row's pieces point at the one stored value, so their storage is not adjacent.
+                array_binary_column->append_strings(v.data(), v.size());
+            } else {
+                array_binary_column->append_continuous_strings(v.data(), v.size());
+            }
         } else {
             //row_nums * 5 is an estimated value, because the true value cannot be obtained for the time being here
             array_binary_column->reserve(row_nums * 5, haystack_columns->get_immutable_bytes().size());
