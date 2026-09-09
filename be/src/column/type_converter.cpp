@@ -602,6 +602,16 @@ public:
             }
             dst->set(value);
             return Status::OK();
+        } else if constexpr (Type == TYPE_DATE) {
+            // Same CAST semantics for string->date: parse with DateValue::from_string, the parser
+            // cast_from_string_to_date_fn uses, and store NULL for a string it rejects.
+            DateValue value;
+            if (!value.from_string(slice.data, slice.size)) {
+                dst->set_null();
+                return Status::OK();
+            }
+            dst->set_date(value);
+            return Status::OK();
         } else {
             std::string source = slice.to_string();
             CppType value;
