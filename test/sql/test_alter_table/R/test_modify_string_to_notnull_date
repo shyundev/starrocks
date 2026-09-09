@@ -1,0 +1,34 @@
+-- name: test_modify_string_to_notnull_date
+create database test_sc_notnull_date_${uuid0};
+-- result:
+-- !result
+use test_sc_notnull_date_${uuid0};
+-- result:
+-- !result
+create table t (k int NOT NULL, v varchar(32) NOT NULL) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values (1, '2024-01-31'), (2, '2024-02-30'), (3, 'abc');
+-- result:
+-- !result
+alter table t modify column v date NOT NULL;
+-- result:
+-- !result
+function: wait_table_schema_change_finish("test_sc_notnull_date_${uuid0}", "t", "CANCELLED")
+-- result:
+CANCELLED
+-- !result
+desc t;
+-- result:
+k	int	NO	true	None	
+v	varchar(32)	NO	false	None	
+-- !result
+select * from t order by k;
+-- result:
+1	2024-01-31
+2	2024-02-30
+3	abc
+-- !result
+drop database test_sc_notnull_date_${uuid0};
+-- result:
+-- !result

@@ -1,0 +1,17 @@
+-- name: test_schema_change_string_to_date_null
+-- MODIFY COLUMN from VARCHAR to DATE applies CAST semantics: a string that does not parse as a date
+-- becomes NULL, not the 1400-01-01 sentinel, which is itself a legal DATE value.
+drop database if exists test_schema_change_string_to_date_null;
+create database test_schema_change_string_to_date_null;
+use test_schema_change_string_to_date_null;
+
+CREATE TABLE cc1 (k INT, v VARCHAR(32)) DUPLICATE KEY(k)
+  DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("fast_schema_evolution"="true","replication_num"="1");
+INSERT INTO cc1 VALUES (1,'2024-01-31'),(2,'20240101'),(3,'2024/01/01'),(4,'2024-01-01 10:00:00'),(5,'1400-01-01'),
+  (6,'2024-02-30'),(7,'2024-13-01'),(8,'abc'),(9,''),(10,'10000-01-01'),(11,NULL);
+ALTER TABLE cc1 MODIFY COLUMN v DATE;
+function: wait_alter_table_finish()
+-- k 1-5 keep the date they parse to, k 6-10 have no date value and become NULL, k 11 stays NULL
+SELECT k,v FROM cc1 ORDER BY k;
+
+drop database test_schema_change_string_to_date_null;

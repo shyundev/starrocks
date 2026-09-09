@@ -1,0 +1,12 @@
+-- name: test_modify_string_to_notnull_date
+create database test_sc_notnull_date_${uuid0};
+use test_sc_notnull_date_${uuid0};
+-- Converting a NOT NULL VARCHAR column to a NOT NULL DATE column fails cleanly (CANCELLED) when a
+-- value has no DATE representation, leaving the column type and the data unchanged.
+create table t (k int NOT NULL, v varchar(32) NOT NULL) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values (1, '2024-01-31'), (2, '2024-02-30'), (3, 'abc');
+alter table t modify column v date NOT NULL;
+function: wait_table_schema_change_finish("test_sc_notnull_date_${uuid0}", "t", "CANCELLED")
+desc t;
+select * from t order by k;
+drop database test_sc_notnull_date_${uuid0};

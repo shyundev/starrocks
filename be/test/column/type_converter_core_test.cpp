@@ -24,6 +24,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/type_converter.h"
+#include "types/date_value.h"
 #include "types/json_value.h"
 #include "types/type_info.h"
 
@@ -85,6 +86,73 @@ TEST(TypeConverterCoreTest, NullableVarcharToInt) {
 
     EXPECT_EQ(456, dst->get(0).get_int32());
     EXPECT_TRUE(dst->get(1).is_null());
+}
+
+TEST(TypeConverterCoreTest, NullableVarcharToDate) {
+    TypeConverterTestAllocator allocator_holder;
+    TypeInfoAllocator allocator = allocator_holder.make_allocator();
+
+    auto src = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    // Accepted by DateValue::from_string, so the date it parses to is stored.
+    src->append_datum(Datum(Slice("2024-01-31")));
+    src->append_datum(Datum(Slice("20240101")));
+    src->append_datum(Datum(Slice("2024/01/01")));
+    src->append_datum(Datum(Slice("2024-01-01 10:00:00")));
+    src->append_datum(Datum(Slice("1400-01-01")));
+    // Rejected by DateValue::from_string, so NULL is stored.
+    src->append_datum(Datum(Slice("2024-02-30")));
+    src->append_datum(Datum(Slice("2024-13-01")));
+    src->append_datum(Datum(Slice("abc")));
+    src->append_datum(Datum(Slice("")));
+    src->append_datum(Datum(Slice("10000-01-01")));
+    src->append_nulls(1);
+
+    auto dst = NullableColumn::create(DateColumn::create(), NullColumn::create());
+    auto src_type = get_type_info(TYPE_VARCHAR);
+    auto dst_type = get_type_info(TYPE_DATE);
+    const TypeConverter* converter = get_type_converter(TYPE_VARCHAR, TYPE_DATE);
+    ASSERT_NE(nullptr, converter);
+
+    auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), &allocator);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    EXPECT_EQ(DateValue::create(2024, 1, 31), dst->get(0).get_date());
+    EXPECT_EQ(DateValue::create(2024, 1, 1), dst->get(1).get_date());
+    EXPECT_EQ(DateValue::create(2024, 1, 1), dst->get(2).get_date());
+    EXPECT_EQ(DateValue::create(2024, 1, 1), dst->get(3).get_date());
+    EXPECT_EQ(DateValue::create(1400, 1, 1), dst->get(4).get_date());
+    for (size_t i = 5; i < dst->size(); i++) {
+        EXPECT_TRUE(dst->get(i).is_null()) << "row " << i;
+    }
+}
+
+// A string with no DATE representation makes the conversion fail when the target column is not
+// nullable; a string that parses still converts.
+TEST(TypeConverterCoreTest, VarcharToNonNullableDate) {
+    TypeConverterTestAllocator allocator_holder;
+    TypeInfoAllocator allocator = allocator_holder.make_allocator();
+
+    auto src_type = get_type_info(TYPE_VARCHAR);
+    auto dst_type = get_type_info(TYPE_DATE);
+    const TypeConverter* converter = get_type_converter(TYPE_VARCHAR, TYPE_DATE);
+    ASSERT_NE(nullptr, converter);
+
+    {
+        auto src = BinaryColumn::create();
+        src->append(Slice("2024-02-30"));
+        auto dst = DateColumn::create();
+        ASSERT_FALSE(dst->is_nullable());
+        auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), &allocator);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto src = BinaryColumn::create();
+        src->append(Slice("2024-01-31"));
+        auto dst = DateColumn::create();
+        auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), &allocator);
+        ASSERT_TRUE(status.ok()) << status.to_string();
+        EXPECT_EQ(DateValue::create(2024, 1, 31), dst->get(0).get_date());
+    }
 }
 
 // Regression test for the schema-change crash: converting an unparseable or out-of-range
