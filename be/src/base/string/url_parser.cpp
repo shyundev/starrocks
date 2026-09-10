@@ -54,6 +54,8 @@ const Slice UrlParser::_s_slash(const_cast<char*>("/"), 1);
 const Slice UrlParser::_s_colon(const_cast<char*>(":"), 1);
 const Slice UrlParser::_s_question(const_cast<char*>("?"), 1);
 const Slice UrlParser::_s_hash(const_cast<char*>("#"), 1);
+// The authority ends at the first '/', '?' or '#' after the protocol.
+static constexpr std::string_view AUTHORITY_END_CHARS = "/?#";
 const StringSearch UrlParser::_s_protocol_search(&_s_protocol);
 const StringSearch UrlParser::_s_at_search(&_s_at);
 const StringSearch UrlParser::_s_slash_search(&_s_slash);
@@ -85,9 +87,7 @@ UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slic
     switch (part) {
     case AUTHORITY: {
         if (is_relative) return ParseStatus::NOT_FOUND;
-        // Find first '/'.
-        int32_t end_pos = _s_slash_search.search(protocol_end);
-        *result = protocol_end.substr(0, end_pos);
+        *result = protocol_end.substr(0, protocol_end.find_first_of(AUTHORITY_END_CHARS));
         return ParseStatus::OK;
     }
 
@@ -125,17 +125,7 @@ UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slic
 
     case HOST: {
         if (is_relative) return ParseStatus::NOT_FOUND;
-        int32_t first_slash = _s_slash_search.search(protocol_end);
-        int32_t first_question = _s_question_search.search(protocol_end);
-
-        int32_t end_pos = first_slash;
-        if (first_slash < 0 || (first_question >= 0 && first_question < first_slash)) {
-            // Either we did not find a slash, or there is one and the first question mark is
-            // left of the first slash (after the protocol), for example:
-            // http://example.com?dir=/etc
-            end_pos = first_question;
-        }
-        auto host_end = protocol_end.substr(0, end_pos);
+        auto host_end = protocol_end.substr(0, protocol_end.find_first_of(AUTHORITY_END_CHARS));
         // Find '@'.
         int32_t start_pos = _s_at_search.search(host_end);
 
@@ -148,7 +138,7 @@ UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slic
         }
         auto host_start = host_end.substr(start_pos);
         // Find ':' to strip out port.
-        end_pos = _s_colon_search.search(host_start);
+        int32_t end_pos = _s_colon_search.search(host_start);
 
         *result = host_start.substr(0, end_pos);
         return ParseStatus::OK;
@@ -191,15 +181,16 @@ UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slic
 
     case USERINFO: {
         if (is_relative) return ParseStatus::NOT_FOUND;
+        auto authority = protocol_end.substr(0, protocol_end.find_first_of(AUTHORITY_END_CHARS));
         // Find '@'.
-        int32_t end_pos = _s_at_search.search(protocol_end);
+        int32_t end_pos = _s_at_search.search(authority);
 
         if (end_pos < 0) {
             // Indicate no user and pass were given.
             return ParseStatus::NOT_FOUND;
         }
 
-        *result = protocol_end.substr(0, end_pos);
+        *result = authority.substr(0, end_pos);
         return ParseStatus::OK;
     }
 

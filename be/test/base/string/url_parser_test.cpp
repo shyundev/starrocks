@@ -37,6 +37,23 @@ TEST(UrlParserTest, normal) {
 
     TEST_URL_PARSE("http://example.com/index.html?1111%22:xxx", "HOST", "example.com");
 }
+TEST(UrlParserTest, authorityEndsAtQueryOrRef) {
+    TEST_URL_PARSE("http://example.com?dir=/etc", "AUTHORITY", "example.com");
+    TEST_URL_PARSE("http://example.com?dir=/etc", "HOST", "example.com");
+    TEST_URL_PARSE("http://example.com?dir=/etc", "USERINFO", "<null>");
+    TEST_URL_PARSE("http://example.com?dir=/etc", "QUERY", "dir=/etc");
+    TEST_URL_PARSE("http://example.com#a@b", "AUTHORITY", "example.com");
+    TEST_URL_PARSE("http://example.com#a@b", "HOST", "example.com");
+    TEST_URL_PARSE("http://example.com#a@b", "USERINFO", "<null>");
+    TEST_URL_PARSE("http://example.com#a@b", "REF", "a@b");
+    TEST_URL_PARSE("http://x.com/login?email=foo@bar.com", "AUTHORITY", "x.com");
+    TEST_URL_PARSE("http://x.com/login?email=foo@bar.com", "HOST", "x.com");
+    TEST_URL_PARSE("http://x.com/login?email=foo@bar.com", "USERINFO", "<null>");
+    TEST_URL_PARSE("http://user:pw@example.com:80?q=1#f", "AUTHORITY", "user:pw@example.com:80");
+    TEST_URL_PARSE("http://user:pw@example.com:80?q=1#f", "HOST", "example.com");
+    TEST_URL_PARSE("http://user:pw@example.com:80?q=1#f", "USERINFO", "user:pw");
+}
+
 TEST(UrlParserTest, reletive) {
     const char* url = "/docs/books/tutorial/index.html?name=networking#DOWNLOADING";
     TEST_URL_PARSE(url, "AUTHORITY", "<null>");
