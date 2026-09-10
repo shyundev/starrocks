@@ -230,6 +230,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from tbl_int where k1 is null");
         sqlList.add("select * from tbl_int where k1 is null or k1 <=> null");
+        sqlList.add("select * from less_than_tbl where k1 > '2020-06-30' and k1 is null");
         sqlList.add("select * from tbl_int where (k1 = 1 or k1 > s1) and k1 is null");
         sqlList.add("select * from ptest where d2 in (null, '2021-01-01')");
         sqlList.add("select * from ptest where (d2 < '1000-01-01') or (d2 in (null, '2021-01-01'))");
@@ -265,7 +266,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from less_than_tbl where k1 is null or k1 <=> null");
         sqlList.add("select * from less_than_tbl where k1 = 1 and k1 is null");
         sqlList.add("select * from less_than_tbl where k1 = '2020-06-30' and k1 is null");
-        sqlList.add("select * from less_than_tbl where k1 > '2020-06-30' and k1 is null");
         sqlList.add("select * from less_than_tbl where k1 != '2020-06-30' and k1 is null");
 
         sqlList.add(
@@ -314,6 +314,8 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from less_than_tbl where k1 = '2020-07-30' or k1 is null");
         sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 is null");
         sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 <=> null");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 <=> null");
 
         sqlList.add("select * from tbl_int where k1 between 0 and 99 or k1 between 300 and 399");
         sqlList.add("select * from tbl_int where (k1 between 0 and 99 or k1 between 300 and 399) and s1 > upper(s2)");
@@ -366,8 +368,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     private static Stream<Arguments> threePartitionsSqlList() {
         List<String> sqlList = Lists.newArrayList();
-        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 is null");
-        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 <=> null");
         sqlList.add("select s1 from tbl_int where k1 <= 100 or k1 >= 300");
         sqlList.add("select s1 from tbl_int where k1 > 300 or k1 < 200");
         sqlList.add("select s1 from tbl_int where k1 != 0 and (k1 < 100 or (k1 > 150 and k1 <= 200))");

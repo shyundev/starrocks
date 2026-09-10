@@ -670,7 +670,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", false, true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", true, true),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", false, false),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
@@ -690,7 +690,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", false, true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true, true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", true, true),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", false, false),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", false, true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", false, true),
@@ -722,7 +722,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", true),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", false),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", true),
@@ -742,7 +742,7 @@ public class MvRewritePartitionTest extends MVTestBase {
                                 // no partition expressions
                                 PCompensateExpect.create("a.id_date='1991-03-30'", true),
                                 PCompensateExpect.create("a.id_date>='1991-03-30'", true),
-                                PCompensateExpect.create("a.id_date!='1991-03-30'", true),
+                                PCompensateExpect.create("a.id_date!='1991-03-30'", false),
                                 // with partition expressions && partition expressions can be pruned
                                 PCompensateExpect.create("date_format(a.id_date, '%Y%m%d')='19910330'", true),
                                 PCompensateExpect.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", true),
