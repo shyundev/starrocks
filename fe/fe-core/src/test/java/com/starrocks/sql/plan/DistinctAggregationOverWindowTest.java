@@ -149,7 +149,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 4> : 11: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 4> : ifnull(11: fused_multi_distinct_count_sum_avg.count[true], 0)\n" +
                 "  |  <slot 5> : 11: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  <slot 6> : 11: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  <slot 7> : 7: count(3: v3)\n" +
@@ -198,7 +198,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 28> : 28: v3\n" +
                 "  |  <slot 30> : 30: avg(3: v3)\n" +
                 "  |  <slot 31> : 31: rank()\n" +
-                "  |  <slot 32> : 29: fused_multi_distinct_count.count[false]\n" +
+                "  |  <slot 32> : ifnull(29: fused_multi_distinct_count.count[true], 0)\n" +
                 "  |  \n" +
                 "  2:ANALYTIC\n" +
                 "  |  functions: [, fused_multi_distinct_count(28: v3), ], [, avg(28: v3), ], [, rank(), ]\n" +
@@ -265,7 +265,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 4> : 11: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 4> : ifnull(11: fused_multi_distinct_count_sum_avg.count[true], 0)\n" +
                 "  |  <slot 5> : 11: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  <slot 6> : 11: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  <slot 7> : 7: count(3: v3)\n" +
@@ -357,8 +357,8 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 10> : murmur_hash3_32(CAST(19: fused_multi_distinct_count_sum_avg.count[true] AS " +
-                "VARCHAR))\n" +
+                "  |  <slot 10> : murmur_hash3_32(CAST(ifnull(19: fused_multi_distinct_count_sum_avg.count[true], 0) " +
+                "AS VARCHAR))\n" +
                 "  |  <slot 11> : murmur_hash3_32(CAST(19: fused_multi_distinct_count_sum_avg.sum[true] AS " +
                 "VARCHAR))\n" +
                 "  |  <slot 12> : murmur_hash3_32(CAST(19: fused_multi_distinct_count_sum_avg.avg[true] AS " +
@@ -388,7 +388,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  group by: 20: v1, 21: v2, 22: ");
 
         assertCContains(plan, "  9:Project\n" +
-                "  |  <slot 4> : 19: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 4> : ifnull(19: fused_multi_distinct_count_sum_avg.count[true], 0)\n" +
                 "  |  <slot 5> : 19: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  <slot 6> : 19: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  <slot 20> : 20: v1\n" +
@@ -429,8 +429,9 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  1 <-> [1: v1, BIGINT, true]\n" +
                 "  |  2 <-> [2: v2, BIGINT, true]\n" +
                 "  |  3 <-> [3: v3, BIGINT, true]\n" +
-                "  |  4 <-> [8: fused_multi_distinct_count_sum_avg, struct<`count` bigint(20), `sum` decimal(38, 2), " +
-                "`avg` decimal(38, 8)>, true].count[false]\n" +
+                "  |  4 <-> ifnull[([8: fused_multi_distinct_count_sum_avg, struct<`count` bigint(20), " +
+                "`sum` decimal(38, 2), `avg` decimal(38, 8)>, true].count[true], 0); args: BIGINT,BIGINT; " +
+                "result: BIGINT; args nullable: true; result nullable: true]\n" +
                 "  |  5 <-> [8: fused_multi_distinct_count_sum_avg, struct<`count` bigint(20), `sum` decimal(38, 2), " +
                 "`avg` decimal(38, 8)>, true].sum[false]\n" +
                 "  |  6 <-> [8: fused_multi_distinct_count_sum_avg, struct<`count` bigint(20), `sum` decimal(38, 2), " +
@@ -594,7 +595,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 4> : 16: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 4> : ifnull(16: fused_multi_distinct_count_sum_avg.count[true], 0)\n" +
                 "  |  <slot 5> : 16: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  <slot 6> : 16: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  \n" +
@@ -610,7 +611,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 7> : 7: v1\n" +
                 "  |  <slot 8> : 8: v2\n" +
                 "  |  <slot 9> : 9: v3\n" +
-                "  |  <slot 10> : 18: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 10> : ifnull(18: fused_multi_distinct_count_sum_avg.count[true], 0)\n" +
                 "  |  <slot 11> : 18: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  <slot 12> : 18: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  \n" +
@@ -665,7 +666,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 4> : 14: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 4> : ifnull(14: fused_multi_distinct_count_sum_avg.count[true], 0)\n" +
                 "  |  <slot 5> : 14: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  <slot 6> : 14: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  <slot 7> : 7: sum(cast(3: v3 as DECIMAL128(19,2)))\n" +
@@ -706,7 +707,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "6: avg(distinct cast(3: v3 as DECIMAL128(19,2))), 15: v1, 16: v2\n" +
                 "  |  \n" +
                 "  10:Project\n" +
-                "  |  <slot 4> : 14: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 4> : ifnull(14: fused_multi_distinct_count_sum_avg.count[true], 0)\n" +
                 "  |  <slot 5> : 14: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  <slot 6> : 14: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  <slot 15> : 15: v1\n" +
@@ -723,6 +724,22 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "[, avg(CAST(3: v3 AS DECIMAL128(19,2))), ], " +
                 "[, count(CAST(3: v3 AS DECIMAL128(19,2))), ], " +
                 "[, rank(), ], [, dense_rank(), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+    }
+
+    @Test
+    public void testCountDistinctOverWindowNeverReturnsNull() throws Exception {
+        String sql = "select v1, v2, count(distinct v3) over(partition by v1 order by v2) as dist_count from t0";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "  3:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 4> : ifnull(5: fused_multi_distinct_count.count[true], 0)\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count(3: v3), ]\n" +
                 "  |  partition by: 1: v1\n" +
                 "  |  order by: 2: v2 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");

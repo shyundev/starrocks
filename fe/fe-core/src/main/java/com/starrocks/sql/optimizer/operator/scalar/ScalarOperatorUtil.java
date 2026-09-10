@@ -98,6 +98,19 @@ public class ScalarOperatorUtil {
                 DEFAULT_TYPE_CAST_RULE);
     }
 
+    // extract the result of count/sum/avg(distinct) from the fused_multi_distinct struct. count(distinct) is
+    // 0 instead of NULL when the frame holds no non-null values, so its subfield is wrapped in ifnull.
+    public static ScalarOperator buildFusedMultiDistinctSubfield(ColumnRefOperator fusedColumnRef, CallOperator call) {
+        SubfieldOperator subfield = new SubfieldOperator(fusedColumnRef, call.getType(), List.of(call.getFnName()));
+        if (!FunctionSet.COUNT.equals(call.getFnName())) {
+            return subfield;
+        }
+        return new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT,
+                Lists.newArrayList(subfield, ConstantOperator.createBigint(0)),
+                ExprUtils.getBuiltinFunction(FunctionSet.IFNULL,
+                        new Type[] {IntegerType.BIGINT, IntegerType.BIGINT}, IS_IDENTICAL));
+    }
+
     public static CallOperator buildSum(ColumnRefOperator arg) {
         Preconditions.checkArgument(arg.getType() == IntegerType.BIGINT);
         Function searchDesc = new Function(new FunctionName(FunctionSet.SUM),

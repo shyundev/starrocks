@@ -73,3 +73,7 @@ select sum(murmur_hash3_32(v1,v2,cnt,sum,avg)) fp
 from cte4
 )
 select assert_true(a.fp = b.fp) from cte5 a,cte3 b;
+select o, count(distinct v) over(order by o) cnt, sum(distinct v) over(order by o) sum, count(v) over(order by o) cnt1
+from (select 1 o, cast(null as int) v union all select 2, 7) t order by o;
+select p, count(distinct v) over(partition by p) cnt, count(v) over(partition by p) cnt1, rank() over(partition by p) r
+from (select 1 p, cast(null as int) v union all select 2, 5) t order by p;

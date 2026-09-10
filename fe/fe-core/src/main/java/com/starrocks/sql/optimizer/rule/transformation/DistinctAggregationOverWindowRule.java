@@ -44,7 +44,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
-import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
@@ -544,8 +543,8 @@ public class DistinctAggregationOverWindowRule implements TreeRewriteRule {
 
                 Map<ColumnRefOperator, ScalarOperator> outputExprs = e.getValue().stream().collect(
                         Collectors.toMap(Pair::getFirst,
-                                p -> new SubfieldOperator(fusedMultiDistinctColRef, p.getSecond().getType(),
-                                        List.of(p.getValue().getFnName()))));
+                                p -> ScalarOperatorUtil.buildFusedMultiDistinctSubfield(fusedMultiDistinctColRef,
+                                        p.getSecond())));
                 Map<ColumnRefOperator, CallOperator> windowCalls = Maps.newHashMap();
                 windowCalls.put(fusedMultiDistinctColRef, fusedMultiDistinct);
                 results.add(new DistinctAggRewriteResult(arg, windowCalls, outputExprs));

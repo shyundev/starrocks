@@ -95,3 +95,15 @@ select assert_true(a.fp = b.fp) from cte5 a,cte3 b;
 -- result:
 1
 -- !result
+select o, count(distinct v) over(order by o) cnt, sum(distinct v) over(order by o) sum, count(v) over(order by o) cnt1
+from (select 1 o, cast(null as int) v union all select 2, 7) t order by o;
+-- result:
+1	0	None	0
+2	1	7	1
+-- !result
+select p, count(distinct v) over(partition by p) cnt, count(v) over(partition by p) cnt1, rank() over(partition by p) r
+from (select 1 p, cast(null as int) v union all select 2, 5) t order by p;
+-- result:
+1	0	0	1
+2	1	1	1
+-- !result
