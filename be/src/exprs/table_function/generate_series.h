@@ -15,6 +15,7 @@
 #pragma once
 
 #include <algorithm>
+#include <optional>
 #include <type_traits>
 
 #include "column/column_builder.h"
@@ -32,7 +33,10 @@ class GenerateSeries final : public TableFunction {
     struct MyState final : public TableFunctionState {
         ~MyState() override = default;
 
-        void on_new_params() override { set_offset(0); }
+        void on_new_params() override { next.reset(); }
+
+        // Where the row being processed resumes on the next `process()` call; unset once the row is done.
+        std::optional<RunTimeCppType<Type>> next;
     };
 
 public:
@@ -71,7 +75,7 @@ public:
         auto move_to_next_row = [&]() {
             curr_row++;
             state->set_processed_rows(curr_row);
-            state->set_offset(0);
+            state->next.reset();
         };
 
         auto step_is_null = [&](size_t row) { return (arg_step == nullptr) ? false : arg_step->is_null(row); };
@@ -86,12 +90,7 @@ public:
                 auto start = arg_start.value(curr_row);
                 auto stop = arg_stop.value(curr_row);
                 auto step = get_step(curr_row);
-                auto offset = (NumericType)state->get_offset();
-                auto current = start;
-                if (add_overflow(start, offset, &current)) {
-                    move_to_next_row();
-                    continue;
-                }
+                auto current = state->next.value_or(start);
 
                 if (step == 0) {
                     state->set_status(Status::InternalError("step size cannot equal zero"));
@@ -157,7 +156,7 @@ public:
                 if (done || overflow) {
                     move_to_next_row();
                 } else {
-                    state->set_offset(current - start);
+                    state->next = current;
                 }
             }
         } // while

@@ -35,10 +35,11 @@ protected:
         Status status;
     };
 
-    // Runs one `process()` batch of generate_series(start, stop[, step]) over a single input row.
+    // Runs `num_batches` consecutive `process()` calls of generate_series(start, stop[, step]) over a single
+    // input row, so a row wider than one chunk is resumed from the state.
     template <LogicalType Type>
-    Result<Type> run_one_batch(RunTimeCppType<Type> start, RunTimeCppType<Type> stop, const RunTimeCppType<Type>* step,
-                               int chunk_size) {
+    std::vector<Result<Type>> run_batches(RunTimeCppType<Type> start, RunTimeCppType<Type> stop,
+                                          const RunTimeCppType<Type>* step, int chunk_size, int num_batches) {
         GenerateSeries<Type> function;
         TableFunctionState* state = nullptr;
         CHECK(function.init(TFunction(), &state).ok());
@@ -63,20 +64,37 @@ protected:
         }
         state->set_params(std::move(input_columns));
 
-        auto [result_columns, offset_column] = function.process(&runtime_state, state);
+        std::vector<Result<Type>> results;
+        for (int i = 0; i < num_batches; ++i) {
+            auto [result_columns, offset_column] = function.process(&runtime_state, state);
 
-        Result<Type> result;
-        result.status = state->status();
-        result.processed_rows = state->processed_rows();
-        if (!result_columns.empty()) {
-            auto column = ColumnHelper::cast_to<Type>(result_columns[0]);
-            result.values.assign(column->immutable_data().begin(), column->immutable_data().end());
-        }
-        if (offset_column != nullptr) {
-            result.offsets.assign(offset_column->immutable_data().begin(), offset_column->immutable_data().end());
+            Result<Type> result;
+            result.status = state->status();
+            result.processed_rows = state->processed_rows();
+            if (!result_columns.empty()) {
+                auto column = ColumnHelper::cast_to<Type>(result_columns[0]);
+                result.values.assign(column->immutable_data().begin(), column->immutable_data().end());
+            }
+            if (offset_column != nullptr) {
+                result.offsets.assign(offset_column->immutable_data().begin(), offset_column->immutable_data().end());
+            }
+            results.push_back(std::move(result));
         }
         CHECK(function.close(&runtime_state, state).ok());
-        return result;
+        return results;
+    }
+
+    template <LogicalType Type>
+    std::vector<Result<Type>> run_batches(RunTimeCppType<Type> start, RunTimeCppType<Type> stop,
+                                          RunTimeCppType<Type> step, int chunk_size, int num_batches) {
+        return run_batches<Type>(start, stop, &step, chunk_size, num_batches);
+    }
+
+    // Runs one `process()` batch of generate_series(start, stop[, step]) over a single input row.
+    template <LogicalType Type>
+    Result<Type> run_one_batch(RunTimeCppType<Type> start, RunTimeCppType<Type> stop, const RunTimeCppType<Type>* step,
+                               int chunk_size) {
+        return run_batches<Type>(start, stop, step, chunk_size, 1).front();
     }
 
     template <LogicalType Type>
@@ -189,6 +207,39 @@ TEST_F(GenerateSeriesCoreTest, implicit_step) {
     ASSERT_OK(result.status);
     EXPECT_EQ(std::vector<int32_t>({3, 4, 5, 6}), result.values);
     EXPECT_EQ(1, result.processed_rows);
+}
+
+// The resume point of a row wider than one chunk used to be stored as an int64 distance from `start`.
+// For LARGEINT that distance was truncated (here it is exactly 2^64, which becomes 0), so the second
+// batch started the row over instead of finishing it.
+TEST_F(GenerateSeriesCoreTest, largeint_row_wider_than_chunk_resumes) {
+    constexpr __int128 kStep = static_cast<__int128>(1) << 62;
+    auto results = run_batches<TYPE_LARGEINT>(static_cast<__int128>(0), kStep * 4, kStep, 4, 2);
+    ASSERT_EQ(2, results.size());
+    ASSERT_OK(results[0].status);
+    EXPECT_EQ(std::vector<__int128>({static_cast<__int128>(0), kStep, kStep * 2, kStep * 3}), results[0].values);
+    EXPECT_EQ(0, results[0].processed_rows);
+    ASSERT_OK(results[1].status);
+    EXPECT_EQ(std::vector<__int128>({kStep * 4}), results[1].values);
+    EXPECT_EQ(std::vector<uint32_t>({0, 1}), results[1].offsets);
+    EXPECT_EQ(1, results[1].processed_rows);
+}
+
+// For BIGINT the distance itself overflowed int64 once the row spanned more than half of the type
+// range, and the garbage value made the second batch drop the rest of the row.
+TEST_F(GenerateSeriesCoreTest, bigint_row_wider_than_chunk_resumes_across_type_range) {
+    constexpr int64_t kBigMin = std::numeric_limits<int64_t>::min();
+    constexpr int64_t kBigMax = std::numeric_limits<int64_t>::max();
+    constexpr int64_t kStep = int64_t{1} << 62;
+    auto results = run_batches<TYPE_BIGINT>(kBigMin, kBigMax, kStep, 3, 2);
+    ASSERT_EQ(2, results.size());
+    ASSERT_OK(results[0].status);
+    EXPECT_EQ(std::vector<int64_t>({kBigMin, -kStep, 0}), results[0].values);
+    EXPECT_EQ(0, results[0].processed_rows);
+    ASSERT_OK(results[1].status);
+    EXPECT_EQ(std::vector<int64_t>({kStep}), results[1].values);
+    EXPECT_EQ(std::vector<uint32_t>({0, 1}), results[1].offsets);
+    EXPECT_EQ(1, results[1].processed_rows);
 }
 
 } // namespace starrocks
