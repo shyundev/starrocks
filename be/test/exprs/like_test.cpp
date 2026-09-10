@@ -822,6 +822,38 @@ TEST_F(LikeTest, backslashEscapeConstEqualsEscapedPercent) {
                         .ok());
 }
 
+TEST_F(LikeTest, backslashEscapeConstTrailing) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: %c\  => a trailing escape character matches a literal backslash
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%c\\", 1);
+
+    str->append("abc\\");
+    str->append("abc");
+    str->append("c\\");
+    str->append("abc\\d");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);  // abc\ matches %c\
+    ASSERT_FALSE(v->get_data()[1]); // abc does not match
+    ASSERT_TRUE(v->get_data()[2]);  // c\ matches
+    ASSERT_FALSE(v->get_data()[3]); // abc\d does not match
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
 TEST_F(LikeTest, backslashEscapeRowPattern) {
     auto context = FunctionContext::create_test_context();
     std::unique_ptr<FunctionContext> ctx(context);
