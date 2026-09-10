@@ -504,6 +504,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 String value = null;
                 try {
                     InPredicate inPredicate = (InPredicate) condition;
+                    // delete a not in (v, null) is never true, so it means delete nothing
+                    if (inPredicate.isNotIn()
+                            && inPredicate.getListChildren().stream().anyMatch(NullLiteral.class::isInstance)) {
+                        return false;
+                    }
                     // delete a in (null) means delete nothing
                     inPredicate.getChildren().removeIf(child -> child instanceof NullLiteral);
                     int inElementNum = inPredicate.getInElementNum();

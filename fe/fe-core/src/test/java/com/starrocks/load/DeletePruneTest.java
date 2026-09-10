@@ -18,13 +18,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -173,6 +177,32 @@ public class DeletePruneTest {
         Assertions.assertEquals(1, res.size());
         Assertions.assertEquals(res.get(0), "p20200103");
 
+    }
+
+    @Test
+    public void testDeleteNotInWithNullDeletesNothing() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Database db = ctx.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_delete");
+        List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
+
+        String deleteSQL = "delete from test_delete where k1 not in ('2020-01-01', null)";
+        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
+        List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(deleteStmt.getDeleteConditions());
+        List<String> deleteConditions = Lists.newArrayList();
+        boolean hasValidCondition = Deencapsulation.invoke(deleteHandler, "checkDelete",
+                tbl, partitions, conditions, deleteConditions);
+        Assertions.assertFalse(hasValidCondition);
+
+        deleteSQL = "delete from test_delete where k1 in ('2020-01-01', null)";
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
+        conditions = DeleteAnalyzer.replaceParameterInExpr(deleteStmt.getDeleteConditions());
+        deleteConditions = Lists.newArrayList();
+        hasValidCondition = Deencapsulation.invoke(deleteHandler, "checkDelete",
+                tbl, partitions, conditions, deleteConditions);
+        Assertions.assertTrue(hasValidCondition);
+        Assertions.assertEquals(Lists.newArrayList("k1 IN ('2020-01-01')"), deleteConditions);
     }
 
     @Test
