@@ -83,4 +83,33 @@ TEST_F(ArithmeticOperationTest, test_decimal_div_integer) {
         ASSERT_EQ(s_expect_quotient, s_actual_quotient);
     }
 }
+
+// The dividend is scaled up before the division, so the scaled dividend may not fit into the
+// result type even when the quotient does.
+TEST_F(ArithmeticOperationTest, test_decimal_div_integer_scaled_dividend_overflow) {
+    std::vector<std::tuple<std::string, int64_t, std::string>> test_cases{
+            {"200000000000000000000000000000000", 4, "50000000000000000000000000000000.000000"},
+            {"-200000000000000000000000000000000", 4, "-50000000000000000000000000000000.000000"},
+            {"200000000000000000000000000000000", 3, "66666666666666666666666666666666.666667"},
+            {"-200000000000000000000000000000000", 3, "-66666666666666666666666666666666.666667"},
+    };
+
+    for (auto& tc : test_cases) {
+        auto& s_dividend = std::get<0>(tc);
+        auto& divisor = std::get<1>(tc);
+        auto& s_expect_quotient = std::get<2>(tc);
+        int128_t dividend = 0;
+        DecimalV3Cast::from_string<int128_t>(&dividend, 38, 0, s_dividend.c_str(), s_dividend.size());
+        auto quotient = decimal_div_integer<int128_t>(dividend, int128_t(divisor), 0);
+        auto s_actual_quotient = DecimalV3Cast::to_string<int128_t>(quotient, 38, 6);
+        ASSERT_EQ(s_expect_quotient, s_actual_quotient);
+    }
+
+    std::string s_dividend256 = "100000000000000000000000000000000000000000000000000000000000000000000000";
+    int256_t dividend256 = 0;
+    DecimalV3Cast::from_string<int256_t>(&dividend256, 76, 0, s_dividend256.c_str(), s_dividend256.size());
+    auto quotient256 = decimal_div_integer<int256_t>(dividend256, int256_t(100), 0);
+    ASSERT_EQ("1000000000000000000000000000000000000000000000000000000000000000000000.000000",
+              DecimalV3Cast::to_string<int256_t>(quotient256, 76, 6));
+}
 } // namespace starrocks
