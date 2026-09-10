@@ -178,6 +178,11 @@ public class PartitionColPredicateEvaluator {
             }
             PartitionKey conditionKey = new PartitionKey();
             conditionKey.pushColumn(literalExpr, childType.getPrimitiveType());
+            if (type == BinaryType.NE && !constantOperator.isNull()) {
+                BitSet res = evaluateRangeHitSet(predicate.getChild(0), Range.lessThan(conditionKey));
+                res.or(evaluateRangeHitSet(predicate.getChild(0), Range.greaterThan(conditionKey)));
+                return res;
+            }
             Range<PartitionKey> predicateRange;
             switch (type) {
                 case EQ:
@@ -337,9 +342,9 @@ public class PartitionColPredicateEvaluator {
             for (int i = 0; i < candidateNum; i++) {
                 Range<PartitionKey> range = ranges.get(i);
                 if (range.isConnected(predicateRange) && !range.intersection(predicateRange).isEmpty()) {
-                    if (isCanonicalType(scalarOperator.getType())) {
+                    Range intersectedRange = range.intersection(predicateRange);
+                    if (isCanonicalType(scalarOperator.getType()) && intersectedRange.hasLowerBound()) {
                         // try to canonical predicate
-                        Range intersectedRange = range.intersection(predicateRange);
                         Range canonicalRange = intersectedRange.canonical(new PartitionKeyDiscreteDomain());
                         if (!canonicalRange.isEmpty()) {
                             bitSet.set(i);
@@ -353,7 +358,7 @@ public class PartitionColPredicateEvaluator {
         }
 
         private boolean isCanonicalType(Type columnType) {
-            return columnType.isInt() || columnType.isLargeint() || columnType.isBigint();
+            return columnType.isInt() || columnType.isLargeint() || columnType.isBigint() || columnType.isDate();
         }
 
         private BitSet createAllTrueBitSet() {

@@ -131,7 +131,7 @@ public class DeletePruneTest {
         deleteSQL = "delete from test_delete where k1 not in ('2020-01-01')";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assertions.assertEquals(366, res.size());
+        Assertions.assertEquals(365, res.size());
 
         deleteSQL = "delete from test_delete where k8 = 1";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
@@ -147,9 +147,8 @@ public class DeletePruneTest {
         deleteSQL = "delete from test_delete where k1 > '2020-01-01' and k1 < '2020-01-03'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assertions.assertEquals(2, res.size());
-        Assertions.assertEquals(res.get(0), "p20200101");
-        Assertions.assertEquals(res.get(1), "p20200102");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p20200102");
 
         deleteSQL = "delete from test_delete where k1 > '2020-01-03' and k1 < '2020-01-01'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);

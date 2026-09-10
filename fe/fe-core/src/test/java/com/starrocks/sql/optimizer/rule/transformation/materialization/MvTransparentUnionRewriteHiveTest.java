@@ -150,7 +150,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 23: l_shipdate != '1998-01-01'\n" +
-                                "     partitions=3/4", // case 2
+                                "     partitions=2/4", // case 2
                         "     TABLE: lineitem_par\n" +
                                 "     PARTITION PREDICATES: 26: l_shipdate >= '1998-01-02', " +
                                 "(26: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (26: l_shipdate IS NULL)\n" +

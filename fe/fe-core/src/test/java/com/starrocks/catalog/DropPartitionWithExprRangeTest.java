@@ -37,6 +37,8 @@ import java.util.List;
 public class DropPartitionWithExprRangeTest extends MVTestBase {
     private static String R1;
     private static String R2;
+    private static String R3;
+    private static String R4;
     private static List<String> RANGE_TABLES;
 
     @BeforeAll
@@ -75,6 +77,36 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                 "    v1 int \n" +
                 ")\n" +
                 "PARTITION BY date_trunc('day', dt)\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');";
+        R3 = "CREATE TABLE r3 \n" +
+                "(\n" +
+                "    dt date,\n" +
+                "    k2 int,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2024-01-01'),('2024-01-02')),\n" +
+                "    PARTITION p2 values [('2024-01-02'),('2024-01-03')),\n" +
+                "    PARTITION p3 values [('2024-01-03'),('2024-01-04')),\n" +
+                "    PARTITION p4 values [('2024-01-04'),('2024-01-05'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');";
+        R4 = "CREATE TABLE r4 \n" +
+                "(\n" +
+                "    k1 int,\n" +
+                "    k2 int,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('0'),('10')),\n" +
+                "    PARTITION p2 values [('10'),('20')),\n" +
+                "    PARTITION p3 values [('20'),('21')),\n" +
+                "    PARTITION p4 values [('21'),('30'))\n" +
+                ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');";
         RANGE_TABLES = ImmutableList.of(R1, R2);
@@ -184,6 +216,60 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
     }
 
     @Test
+    public void testDropPartitionsWithDailyRangeTable() {
+        starRocksAssert.withTable(R3, (obj) -> {
+            String tableName = (String) obj;
+            OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+            {
+                // p1 [2024-01-01, 2024-01-02) holds 2024-01-01 only
+                String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
+                        "WHERE dt <= '2024-01-01';", tableName);
+                starRocksAssert.alterTable(dropPartitionSql);
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+            }
+            {
+                String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
+                        "WHERE dt = '2024-01-03';", tableName);
+                starRocksAssert.alterTable(dropPartitionSql);
+                Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
+            }
+            {
+                // p2 [2024-01-02, 2024-01-03) holds 2024-01-02, which does not match, so only p4 is dropped
+                String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
+                        "WHERE dt > '2024-01-02';", tableName);
+                starRocksAssert.alterTable(dropPartitionSql);
+                Assertions.assertEquals(1, olapTable.getVisiblePartitions().size());
+                Assertions.assertNotNull(olapTable.getPartition("p2"));
+            }
+        });
+    }
+
+    @Test
+    public void testDropPartitionsWithIntRangeTable() {
+        starRocksAssert.withTable(R4, (obj) -> {
+            String tableName = (String) obj;
+            OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+            {
+                // p1 [0, 10) holds values other than 5
+                String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
+                        "WHERE k1 = 5;", tableName);
+                starRocksAssert.alterTable(dropPartitionSql);
+                Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+            }
+            {
+                // p3 [20, 21) holds 20 only
+                String dropPartitionSql = String.format("alter table %s DROP PARTITIONS " +
+                        "WHERE k1 = 20;", tableName);
+                starRocksAssert.alterTable(dropPartitionSql);
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertNull(olapTable.getPartition("p3"));
+            }
+        });
+    }
+
+    @Test
     public void testDropPartitionsWithRangeTable3() {
         starRocksAssert.withTable(R2, (obj) -> {
             String tableName = (String) obj;
@@ -206,7 +292,8 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "WHERE date_trunc('day', dt) <= date_sub('2024-02-01', 2)", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
+                Assertions.assertNull(olapTable.getPartition("p2"));
             }
 
             {
@@ -215,7 +302,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "dt != (date_trunc(\'month\', dt) + interval 1 month - interval 1 day)", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
             }
 
             {
@@ -224,7 +311,7 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                         "dt <= (date_trunc(\'month\', dt) + interval 1 month - interval 1 day)", tableName);
                 System.out.println(dropPartitionSql);
                 starRocksAssert.alterTable(dropPartitionSql);
-                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+                Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
             }
 
             {
