@@ -673,7 +673,7 @@ std::string LikePredicate::convert_like_pattern(FunctionContext* context, const 
         } else if (!is_escaped && pattern.data[i] == '_') {
             re_pattern.append(".");
             // check for escape char before checking for regex special chars, they might overlap
-        } else if (!is_escaped && pattern.data[i] == escape_char) {
+        } else if (!is_escaped && pattern.data[i] == escape_char && i + 1 < pattern.size) {
             is_escaped = true;
         } else if (pattern.data[i] == '.' || pattern.data[i] == '[' || pattern.data[i] == ']' ||
                    pattern.data[i] == '{' || pattern.data[i] == '}' || pattern.data[i] == '(' ||
