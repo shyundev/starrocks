@@ -1,0 +1,40 @@
+-- name: test_low_cardinality_join_build_only_null
+admin set frontend config ("dict_thrash_guard_threshold" = "1000000");
+set cbo_enable_low_cardinality_optimize = true;
+
+CREATE TABLE `t_probe` (
+  `k` int NOT NULL,
+  `c_str` varchar(64) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE `t_build` (
+  `k` int NOT NULL,
+  `c_str` varchar(64) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t_probe
+select generate_series, if(generate_series % 1000 = 0, concat('v', generate_series % 3), NULL)
+from TABLE(generate_series(0, 9999));
+
+insert into t_build select generate_series, NULL from TABLE(generate_series(0, 99));
+
+[UC] analyze full table t_probe;
+[UC] analyze full table t_build;
+
+function: wait_global_dict_ready('c_str', 't_probe')
+function: wait_global_dict_ready('c_str', 't_build')
+
+-- Every build key is NULL, so the null-safe join's runtime IN filter carries no value and
+-- reaches the dict-encoded probe column as `c_str IS NULL`.
+select count(*) from t_probe p join t_build b on p.c_str <=> b.c_str;
+
+select count(*) from t_probe p join t_build b on p.c_str <=> b.c_str where p.k < 2000;
+
+drop table t_probe force;
+drop table t_build force;

@@ -610,4 +610,97 @@ TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_no_null) {
     ASSERT_TRUE(ret2.ok());
     ASSERT_EQ(ret2.value().debug_string(), "{\"and\":[{\"pred\":\"((columnId=1)IN(9,5,1,7,3))\"}]}");
 }
+
+TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_only_null) {
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
+
+    ColumnRef* col_ref = _pool.add(new ColumnRef(TYPE_INT_DESC, 1));
+    VectorizedInConstPredicateBuilder builder(&_runtime_state, &_pool, col_ref);
+    builder.set_null_in_set(true);
+    builder.use_as_join_runtime_filter();
+    ASSERT_OK(builder.create());
+    // the build side held only NULL keys, so the value set stays empty
+
+    _expr_containers.emplace_back(BoxedExprContext(builder.get_in_const_predicate()));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, pred_builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, pred_builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[{\"pred\":\"(ColumnId(1) IS NULL)\"}]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_on_dict_code_has_null) {
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC, 1}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
+    _opts.enable_column_expr_predicate = true;
+
+    // c1 is read through a global dict, so the join runtime filter probes its dict code
+    std::vector<std::string> dict_words{"aa", "bb", "cc"};
+    GlobalDictMap forward;
+    RGlobalDictMap reverse;
+    for (size_t i = 0; i < dict_words.size(); i++) {
+        forward.emplace(Slice(dict_words[i]), static_cast<int32_t>(i + 1));
+        reverse.emplace(static_cast<int32_t>(i + 1), Slice(dict_words[i]));
+    }
+    _fragment_dict_state->mutable_query_global_dicts()->emplace(1,
+                                                                std::make_pair(std::move(forward), std::move(reverse)));
+
+    ColumnRef* col_ref = _pool.add(new ColumnRef(TypeDescriptor(LowCardDictType), 1));
+    VectorizedInConstPredicateBuilder builder(&_runtime_state, &_pool, col_ref);
+    builder.set_null_in_set(true);
+    builder.use_as_join_runtime_filter();
+    ASSERT_OK(builder.create());
+
+    std::vector<int32_t> codes{1, 3};
+    builder.add_values(ColumnTestHelper::build_column(codes), 0);
+
+    _expr_containers.emplace_back(BoxedExprContext(builder.get_in_const_predicate()));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, pred_builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    auto varchar_tablet_schema = SchemaTestHelper::gen_schema_of_dup(TYPE_VARCHAR, 1, 3, 1);
+    auto* varchar_pred_parser = _pool.add(new OlapPredicateParser(varchar_tablet_schema));
+    ASSIGN_OR_ASSERT_FAIL(auto pred, pred_builder.get_predicate_tree_root(varchar_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(),
+              "{\"and\":[{\"or\":[{\"pred\":\"((columnId=1)IN(aa,cc))\"},{\"pred\":\"(ColumnId(1) IS NULL)\"}]}]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_on_dict_code_has_only_null) {
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC, 1}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    RuntimeFilterProbeCollector collector;
+    _opts.runtime_filters = &collector;
+    _opts.enable_column_expr_predicate = true;
+
+    _fragment_dict_state->mutable_query_global_dicts()->emplace(1, GlobalDictMapEntity{});
+
+    ColumnRef* col_ref = _pool.add(new ColumnRef(TypeDescriptor(LowCardDictType), 1));
+    VectorizedInConstPredicateBuilder builder(&_runtime_state, &_pool, col_ref);
+    builder.set_null_in_set(true);
+    builder.use_as_join_runtime_filter();
+    ASSERT_OK(builder.create());
+
+    _expr_containers.emplace_back(BoxedExprContext(builder.get_in_const_predicate()));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, pred_builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    auto varchar_tablet_schema = SchemaTestHelper::gen_schema_of_dup(TYPE_VARCHAR, 1, 3, 1);
+    auto* varchar_pred_parser = _pool.add(new OlapPredicateParser(varchar_tablet_schema));
+    ASSIGN_OR_ASSERT_FAIL(auto pred, pred_builder.get_predicate_tree_root(varchar_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[{\"pred\":\"(ColumnId(1) IS NULL)\"}]}");
+}
 } // namespace starrocks

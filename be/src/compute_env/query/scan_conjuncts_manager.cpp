@@ -845,6 +845,16 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                     continue;
                 }
 
+                // only NULL keys on the build side: `col IN () OR col IS NULL` is just `col IS NULL`
+                if (pred->null_in_set() && pred->hash_set().empty()) {
+                    TCondition is_null;
+                    is_null.column_name = slot.col_name();
+                    is_null.condition_op = "is";
+                    is_null.condition_values.push_back("null");
+                    is_null_vector.push_back(is_null);
+                    continue;
+                }
+
                 if (pred->null_in_set()) {
                     std::vector<BoxedExpr> containers;
                     auto* new_in_pred =
