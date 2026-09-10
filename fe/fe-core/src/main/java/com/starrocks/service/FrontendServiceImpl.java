@@ -1812,6 +1812,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         try {
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+            // Constant expressions in the column mapping are folded on the FE with the session time zone,
+            // and the pipeline LoadPlanner/JobSpec path also derives query_globals.time_zone from it.
+            context.getSessionVariable().setTimeZone(streamLoadInfo.getTimezone());
 
             TExecPlanFragmentParams plan;
             Coordinator coord;
@@ -1828,9 +1831,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 // Resource-group resolution on the pipeline path reads ctx.getQualifiedUser();
                 // set it here (pipeline path only, so the legacy path is unchanged).
                 context.setQualifiedUser(request.getUser());
-                // The LoadPlanner/JobSpec path derives query_globals.time_zone from the context
-                // session variable, not from streamLoadInfo; set it so the load honors its timezone.
-                context.getSessionVariable().setTimeZone(streamLoadInfo.getTimezone());
                 // Run the classic synchronous stream load on the pipeline engine. Reuse LoadPlanner
                 // (the pipeline-correct planner used by the transaction stream load) so the FILE_STREAM
                 // scan range is assigned as a pipeline morsel, then materialize a single BE-local

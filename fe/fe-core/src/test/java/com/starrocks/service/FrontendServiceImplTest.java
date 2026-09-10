@@ -64,12 +64,14 @@ import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
+import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeMetricsResult;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFileType;
@@ -1899,6 +1901,51 @@ public class FrontendServiceImplTest {
         } finally {
             Config.enable_pipeline_stream_load = savedFlag;
         }
+    }
+
+    @Test
+    public void testStreamLoadPutTimezone() throws Exception {
+        // Constants in the column mapping are folded on the FE with the session time zone,
+        // so the legacy path must plan with the time zone of the request as well.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        new MockUp<FrontendServiceImpl>() {
+            @Mock
+            public TNetworkAddress getClientAddr() {
+                return new TNetworkAddress("localhost", 8000);
+            }
+        };
+
+        TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+        beginRequest.setLabel("test_timezone_label");
+        beginRequest.setDb("test");
+        beginRequest.setTbl("site_access_auto");
+        beginRequest.setUser("root");
+        beginRequest.setPasswd("");
+        TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+        Assertions.assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+
+        TStreamLoadPutRequest loadRequest = new TStreamLoadPutRequest();
+        loadRequest.setDb("test");
+        loadRequest.setTbl("site_access_auto");
+        loadRequest.setTxnId(beginResult.getTxnId());
+        loadRequest.setLoadId(new TUniqueId(6, 7));
+        loadRequest.setFileType(TFileType.FILE_STREAM);
+        loadRequest.setUser("root");
+        loadRequest.setColumnSeparator(",");
+        loadRequest.setColumns("city_code,event_day=from_unixtime(0)");
+        loadRequest.setTimezone("America/New_York");
+
+        TStreamLoadPutResult result = impl.streamLoadPut(loadRequest);
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+
+        TBrokerScanRangeParams scanParams = result.getParams().getParams().getPer_node_scan_ranges().values()
+                .iterator().next().get(0).getScan_range().getBroker_scan_range().getParams();
+        List<String> dateLiterals = scanParams.getExpr_of_dest_slot().values().stream()
+                .flatMap(expr -> expr.getNodes().stream())
+                .filter(TExprNode::isSetDate_literal)
+                .map(node -> node.getDate_literal().getValue())
+                .collect(Collectors.toList());
+        Assertions.assertEquals(Lists.newArrayList("1969-12-31 19:00:00"), dateLiterals);
     }
 
     @Test
