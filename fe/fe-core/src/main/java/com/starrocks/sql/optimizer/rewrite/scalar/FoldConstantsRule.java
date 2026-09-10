@@ -184,7 +184,16 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             }
         };
         return arrayUnaryFun(call, (elements) -> elements.stream().filter(elem -> !elem.isConstantNull())
-                .map(elem -> (ConstantOperator) elem).reduce(add).orElse(ConstantOperator.NULL));
+                .map(elem -> widenIntegerElement((ConstantOperator) elem, call.getType()))
+                .reduce(add).orElse(ConstantOperator.NULL));
+    }
+
+    // integer elements are added in the type of the call, not in the element type
+    private static ConstantOperator widenIntegerElement(ConstantOperator element, Type type) {
+        if (!element.getType().isFixedPointType() || element.getType().equals(type)) {
+            return element;
+        }
+        return element.castTo(type).orElseThrow(IllegalArgumentException::new);
     }
 
     private Optional<ScalarOperator> constArrayMinMax(CallOperator call, boolean lessThan) {
