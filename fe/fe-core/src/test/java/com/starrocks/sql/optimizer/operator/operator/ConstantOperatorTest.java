@@ -19,18 +19,31 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 public class ConstantOperatorTest {
+    @Test
+    public void testDecimalEqualsIgnoresScale() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 2);
+        ConstantOperator two = ConstantOperator.createDecimal(new BigDecimal("2"), type);
+        ConstantOperator twoPointZero = ConstantOperator.createDecimal(new BigDecimal("2.0"), type);
+        Assertions.assertEquals(two, twoPointZero);
+        Assertions.assertEquals(two.hashCode(), twoPointZero.hashCode());
+        Assertions.assertNotEquals(two, ConstantOperator.createDecimal(new BigDecimal("2.01"), type));
+    }
+
     @Test
     public void testCastToDateValid() throws Exception {
         String[][] testCases = {

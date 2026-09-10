@@ -416,7 +416,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public int hashCodeSelf() {
-        return Objects.hash(value, type.getPrimitiveType(), isNull);
+        Object hashValue = value instanceof BigDecimal ? ((BigDecimal) value).stripTrailingZeros() : value;
+        return Objects.hash(hashValue, type.getPrimitiveType(), isNull);
     }
 
     @Override
@@ -429,8 +430,16 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
         ConstantOperator that = (ConstantOperator) obj;
         return isNull == that.isNull &&
-                Objects.equals(value, that.value) &&
+                valueEquals(that.value) &&
                 type.matchesType(that.getType());
+    }
+
+    // Decimal constants of the same type may carry different scales, e.g. 2 and 2.0
+    private boolean valueEquals(Object other) {
+        if (value instanceof BigDecimal && other instanceof BigDecimal) {
+            return ((BigDecimal) value).compareTo((BigDecimal) other) == 0;
+        }
+        return Objects.equals(value, other);
     }
 
     @Override

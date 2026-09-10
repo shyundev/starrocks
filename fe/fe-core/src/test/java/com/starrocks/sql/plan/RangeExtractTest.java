@@ -94,6 +94,13 @@ public class RangeExtractTest extends PlanTestBase {
     }
 
     @Test
+    public void testDecimalPredicateWithDifferentScales() throws Exception {
+        String sql = "select * from test_all_type where id_decimal = 2 and id_decimal = 2.0";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertFalse(plan.contains("EMPTYSET"), plan);
+    }
+
+    @Test
     public void testRangePredicate9() throws Exception {
         String sql = "select * from t0 where v1 > 1 and v1 <= 1";
         String plan = getFragmentPlan(sql);
