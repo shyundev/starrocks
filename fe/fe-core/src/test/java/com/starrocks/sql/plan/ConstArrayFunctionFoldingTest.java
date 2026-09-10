@@ -65,7 +65,10 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
                 {"array_max([NULL, 4, 7, 11, NULL])", "<slot 2> : 11"}, {"array_max(NULL)", "<slot 2> : NULL"},
                 {"array_avg([1, 2, 3, 4])", "<slot 2> : 2.5"}, {"array_avg([NULL,1, 2, 3, 4])", "<slot 2> : 2"},
                 {"array_avg([])", "<slot 2> : NULL"}, {"array_avg(NULL)", "<slot 2> : NULL"},
-                {"array_avg([NULL, NULL])", "<slot 2> : NULL"}
+                {"array_avg([NULL, NULL])", "<slot 2> : NULL"},
+                {"array_sum([100, 100])", "<slot 2> : 200"}, {"array_sum([16384, 16384])", "<slot 2> : 32768"},
+                {"array_sum([2147483647, 1])", "<slot 2> : 2147483648"},
+                {"array_avg([100, 100])", "<slot 2> : 100.0"}
         };
         String sqlFmt = "select {FUNC}";
         for (String[] tc : cases) {
