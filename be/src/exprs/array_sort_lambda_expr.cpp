@@ -551,7 +551,12 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_checked(ExprContext* context, 
     // Validate strict weak ordering if lambda depends on arguments (i.e., it's a comparator)
     RETURN_IF_ERROR(validate_strict_weak_ordering(context, chunk, down_cast<const ArrayColumn*>(data_column)));
 
-    return evaluate_lambda_expr(context, chunk, data_column);
+    ASSIGN_OR_RETURN(auto result, evaluate_lambda_expr(context, chunk, data_column));
+    if (null_column != nullptr) {
+        return FunctionHelper::merge_column_and_null_column(std::move(result),
+                                                            ColumnHelper::as_column<NullColumn>(null_column->clone()));
+    }
+    return result;
 }
 
 std::string ArraySortLambdaExpr::debug_string() const {

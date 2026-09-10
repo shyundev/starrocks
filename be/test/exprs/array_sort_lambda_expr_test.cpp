@@ -63,6 +63,25 @@ protected:
         return expr;
     }
 
+    // An array<int> column of `num_rows` rows: the row at `null_row` is NULL, the others [4, 1, 3].
+    Expr* make_nullable_array_expr(size_t num_rows, size_t null_row) {
+        auto array = ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true);
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (i == null_row) {
+                array->append_nulls(1);
+            } else {
+                array->append_datum(DatumArray{Datum((int32_t)4), Datum((int32_t)1), Datum((int32_t)3)});
+            }
+        }
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::INT_LITERAL);
+        node.__set_num_children(0);
+        node.__set_type(TYPE_INT_ARRAY_DESC.to_thrift());
+        auto* expr = _pool.add(new FakeConstExpr(node));
+        expr->_column = std::move(array);
+        return expr;
+    }
+
     ColumnRef* make_arg_ref(SlotId slot_id) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
@@ -336,6 +355,60 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     chunk->append_column(std::move(rows), 1);
     ColumnPtr result = expr->evaluate(&ctx, chunk.get()); // must not crash
     ASSERT_EQ(2, result->size());
+
+    ExprExecutor::close(ctxs, &_runtime_state);
+}
+
+// A NULL array row has its elements emptied before the comparator runs, and the sorted result
+// used to be returned without the null flags of the input, so such a row came back as an empty
+// array instead of NULL.
+TEST_F(ArraySortLambdaExprTest, null_array_row_stays_null) {
+    constexpr size_t kNullRow = 1;
+    auto* expr = _pool.add(new ArraySortLambdaExpr(TYPE_INT_ARRAY_DESC));
+    expr->add_child(make_nullable_array_expr(kNumRows, kNullRow));
+    expr->add_child(make_comparator(TExprOpcode::LT));
+
+    ExprContext ctx(expr);
+    std::vector<ExprContext*> ctxs = {&ctx};
+    ASSERT_OK(ExprExecutor::prepare(ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctxs, &_runtime_state));
+
+    auto chunk = make_chunk();
+    ASSIGN_OR_ABORT(ColumnPtr result, ctx.evaluate(expr, chunk.get()));
+    ASSERT_EQ(kNumRows, result->size());
+    for (size_t row = 0; row < kNumRows; ++row) {
+        if (row == kNullRow) {
+            EXPECT_TRUE(result->is_null(row)) << "row " << row << " is " << result->debug_item(row) << ", want NULL";
+            continue;
+        }
+        auto sorted = result->get(row).get_array();
+        ASSERT_EQ(3, sorted.size());
+        EXPECT_EQ(1, sorted[0].get_int32());
+        EXPECT_EQ(3, sorted[1].get_int32());
+        EXPECT_EQ(4, sorted[2].get_int32());
+    }
+
+    ExprExecutor::close(ctxs, &_runtime_state);
+}
+
+// The same, on a chunk of a single row, which takes the constant result path of the sort.
+TEST_F(ArraySortLambdaExprTest, null_array_row_stays_null_in_single_row_chunk) {
+    auto* expr = _pool.add(new ArraySortLambdaExpr(TYPE_INT_ARRAY_DESC));
+    expr->add_child(make_nullable_array_expr(1, 0));
+    expr->add_child(make_comparator(TExprOpcode::LT));
+
+    ExprContext ctx(expr);
+    std::vector<ExprContext*> ctxs = {&ctx};
+    ASSERT_OK(ExprExecutor::prepare(ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctxs, &_runtime_state));
+
+    auto chunk = std::make_shared<Chunk>();
+    auto rows = Int32Column::create();
+    rows->append(0);
+    chunk->append_column(std::move(rows), 1);
+    ASSIGN_OR_ABORT(ColumnPtr result, ctx.evaluate(expr, chunk.get()));
+    ASSERT_EQ(1, result->size());
+    EXPECT_TRUE(result->is_null(0)) << "row 0 is " << result->debug_item(0) << ", want NULL";
 
     ExprExecutor::close(ctxs, &_runtime_state);
 }
