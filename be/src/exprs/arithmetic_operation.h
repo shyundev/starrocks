@@ -433,7 +433,16 @@ T decimal_div_integer(const T& dividend, const T& adjusted_r, int dividend_scale
     T adjust_scale_factor = get_scale_factor<T>(adjust_scale);
     // scale dividend up by adjust_scale
     T scaled_dividend = 0;
-    DecimalV3Cast::to_decimal<T, T, T, true, false>(dividend, adjust_scale_factor, &scaled_dividend);
+    if (DecimalV3Cast::to_decimal<T, T, T, true, true>(dividend, adjust_scale_factor, &scaled_dividend)) {
+        // the scaled dividend overflows T while the quotient may still fit, so divide first
+        // and scale the integral part and the remainder apart. adjusted_r is a row count and
+        // adjust_scale is at most 6, so scaling the remainder up stays in range
+        T integral = dividend / adjusted_r;
+        T remainder = dividend % adjusted_r;
+        T scaled_remainder = 0;
+        DecimalV3Arithmetics<T, false>::div_round(remainder * adjust_scale_factor, adjusted_r, &scaled_remainder);
+        return integral * adjust_scale_factor + scaled_remainder;
+    }
     // compute the quotient
     T quotient = 0;
     DecimalV3Arithmetics<T, false>::div_round(scaled_dividend, adjusted_r, &quotient);
