@@ -1453,6 +1453,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 });
 
+                olapTable.lastSchemaUpdateTime.set(System.nanoTime());
+
                 for (PartitionPersistInfoV2 infoV2 : partitionInfoV2List) {
                     LOG.info("succeed in creating partition[{}], name: {}, temp: {}", infoV2.getPartition().getId(),
                             infoV2.getPartition().getName(), isTempPartition);
@@ -5318,6 +5320,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             finalOlapTable.getId(), e.getMessage());
                 }
             });
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         } catch (DdlException e) {
             deleteUselessTablets(tabletIdSet);
             throw e;

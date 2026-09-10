@@ -14,15 +14,20 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
@@ -83,6 +88,44 @@ public class PreparedStmtTest{
 
         ctx.putPreparedStmt("stmt2", new PrepareStmtContext(stmt2, ctx, null));
         Assertions.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql4, ctx));
+    }
+
+    @Test
+    public void testNeedReAnalyzeAfterTruncateTable() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE demo.pk_truncate (id BIGINT NOT NULL, v INT) PRIMARY KEY (id) " +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(
+                "PREPARE stmt FROM select * from demo.pk_truncate where id = ?", ctx);
+        QueryStatement query = (QueryStatement) prepareStmt.getInnerStmt();
+        PrepareStmtContext prepareStmtContext = new PrepareStmtContext(prepareStmt, ctx, null);
+        prepareStmtContext.updateLastSchemaUpdateTime(query, ctx);
+        Assertions.assertFalse(prepareStmtContext.needReAnalyze(query, ctx));
+
+        TruncateTableStmt truncateStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "TRUNCATE TABLE demo.pk_truncate", ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateStmt, ctx);
+        Assertions.assertTrue(prepareStmtContext.needReAnalyze(query, ctx));
+    }
+
+    @Test
+    public void testNeedReAnalyzeAfterAddPartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE demo.pk_add_partition (id BIGINT NOT NULL, dt DATE NOT NULL, v INT) " +
+                "PRIMARY KEY (id, dt) PARTITION BY RANGE(dt) (PARTITION p1 VALUES [('2024-01-01'), ('2024-01-02'))) " +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(
+                "PREPARE stmt FROM select * from demo.pk_add_partition where id = ? and dt = ?", ctx);
+        QueryStatement query = (QueryStatement) prepareStmt.getInnerStmt();
+        PrepareStmtContext prepareStmtContext = new PrepareStmtContext(prepareStmt, ctx, null);
+        prepareStmtContext.updateLastSchemaUpdateTime(query, ctx);
+        Assertions.assertFalse(prepareStmtContext.needReAnalyze(query, ctx));
+
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE demo.pk_add_partition ADD PARTITION p2 VALUES [('2024-01-02'), ('2024-01-03'))", ctx);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("demo");
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addPartitions(ctx, db, "pk_add_partition", addPartitionClause);
+        Assertions.assertTrue(prepareStmtContext.needReAnalyze(query, ctx));
     }
 
     @Test
