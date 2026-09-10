@@ -1416,6 +1416,10 @@ void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_e
             // And for others, _found_partition_end.second is identical to _partition.end, so we can always use _found_partition_end
             // instead of _partition.end to refer to the current right boundary.
             current_frame_end = std::min<int64_t>(current_frame_end, _partition.end);
+            // A frame such as `ROWS BETWEEN 3 PRECEDING AND 2 PRECEDING` ends before it starts at the
+            // beginning of a partition. Normalize it to an empty frame, because the aggregate functions
+            // walk [frame_start, frame_end) with an unsigned index.
+            current_frame_end = std::max<int64_t>(current_frame_end, current_frame_start);
         }
         if (_is_merge_funcs) {
             for (size_t j = current_frame_start; j < current_frame_end; j++) {

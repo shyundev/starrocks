@@ -1,0 +1,21 @@
+-- name: test_rows_frame_end_before_start
+CREATE TABLE `t0` (
+    `k` int(11) NOT NULL,
+    `v` int(11) NOT NULL,
+    `s` varchar(8) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO `t0` VALUES (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c');
+
+-- The frame of the first rows of the partition ends before it starts, so those rows aggregate over an
+-- empty frame.
+SELECT k, max_by(s, v) OVER (ORDER BY k ROWS BETWEEN 3 PRECEDING AND 2 PRECEDING) AS w FROM `t0` ORDER BY k;
+
+SELECT k, covar_samp(v, k) OVER (ORDER BY k ROWS BETWEEN 3 PRECEDING AND 2 PRECEDING) AS w FROM `t0` ORDER BY k;
+
+SELECT k, count(v) OVER (ORDER BY k ROWS BETWEEN 3 PRECEDING AND 2 PRECEDING) AS w FROM `t0` ORDER BY k;
