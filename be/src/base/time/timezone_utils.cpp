@@ -73,9 +73,17 @@ void TimezoneUtils::init_time_zones() {
             VLOG(1) << "not found timezone:" << timezone;
         }
     }
+    // only time zones without any utc offset transition have a constant offset to cache
+    std::vector<std::string_view> fixed_timezones;
+    cctz::time_zone::civil_transition transition;
+    for (const auto& [timezone, ctz] : _s_cached_timezone) {
+        if (!ctz.next_transition(cctz::time_point<cctz::seconds>::min(), &transition)) {
+            fixed_timezones.emplace_back(timezone);
+        }
+    }
     auto civil = cctz::civil_second(2021, 12, 1, 8, 30, 1);
-    for (const auto& [timezone1, _] : _s_cached_timezone) {
-        for (const auto& [timezone2, _] : _s_cached_timezone) {
+    for (const auto& timezone1 : fixed_timezones) {
+        for (const auto& timezone2 : fixed_timezones) {
             const auto tp1 = cctz::convert(civil, _s_cached_timezone[timezone1]);
             const auto tp2 = cctz::convert(civil, _s_cached_timezone[timezone2]);
             std::pair<std::string_view, std::string_view> key = {timezone1, timezone2};

@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -2499,6 +2500,58 @@ TEST_F(TimeFunctionsTest, convertTzGeneralTest) {
 
     auto day_names = ColumnHelper::cast_to<TYPE_DATETIME>(result);
     for (int i = 0; i < std::size(res); ++i) ASSERT_EQ(res[i], day_names->get_data()[i]);
+
+    ASSERT_TRUE(
+            TimeFunctions::convert_tz_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
+}
+
+TEST_F(TimeFunctionsTest, convertTzGeneralTransitionZoneTest) {
+    TimezoneUtils::init_time_zones();
+
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2016, 1, 15, 12, 0, 0));
+    tc->append(TimestampValue::create(2018, 1, 15, 12, 0, 0));
+    tc->append(TimestampValue::create(2015, 1, 15, 12, 0, 0));
+    tc->append(TimestampValue::create(2016, 1, 15, 3, 30, 0));
+    tc->append(TimestampValue::create(2018, 1, 15, 14, 0, 0));
+    tc->append(TimestampValue::create(2015, 1, 15, 10, 0, 0));
+
+    auto tc_from = BinaryColumn::create();
+    tc_from->append(Slice("Asia/Pyongyang"));
+    tc_from->append(Slice("America/Sao_Paulo"));
+    tc_from->append(Slice("Europe/Istanbul"));
+    tc_from->append(Slice("UTC"));
+    tc_from->append(Slice("UTC"));
+    tc_from->append(Slice("UTC"));
+
+    auto tc_to = BinaryColumn::create();
+    tc_to->append(Slice("UTC"));
+    tc_to->append(Slice("UTC"));
+    tc_to->append(Slice("UTC"));
+    tc_to->append(Slice("Asia/Pyongyang"));
+    tc_to->append(Slice("America/Sao_Paulo"));
+    tc_to->append(Slice("Europe/Istanbul"));
+
+    TimestampValue res[] = {
+            TimestampValue::create(2016, 1, 15, 3, 30, 0), TimestampValue::create(2018, 1, 15, 14, 0, 0),
+            TimestampValue::create(2015, 1, 15, 10, 0, 0), TimestampValue::create(2016, 1, 15, 12, 0, 0),
+            TimestampValue::create(2018, 1, 15, 12, 0, 0), TimestampValue::create(2015, 1, 15, 12, 0, 0)};
+    Columns columns;
+    columns.emplace_back(tc);
+    columns.emplace_back(tc_from);
+    columns.emplace_back(tc_to);
+
+    _utils->get_fn_ctx()->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            TimeFunctions::convert_tz_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
+
+    ColumnPtr result = TimeFunctions::convert_tz(_utils->get_fn_ctx(), columns).value();
+
+    auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+    for (int i = 0; i < std::size(res); ++i) EXPECT_EQ(res[i], datetimes->get_data()[i]) << "row " << i;
 
     ASSERT_TRUE(
             TimeFunctions::convert_tz_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)

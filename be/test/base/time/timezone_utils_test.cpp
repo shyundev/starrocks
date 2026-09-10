@@ -60,4 +60,19 @@ PARALLEL_TEST(TimezoneUtilTest, find_time_zone) {
     }
 }
 
+PARALLEL_TEST(TimezoneUtilTest, timezone_offsets_only_for_fixed_offset_zones) {
+    TimezoneUtils::init_time_zones();
+    int64_t offset = 0;
+    std::vector<std::pair<std::string, std::string>> transition_zones{
+            {"Asia/Pyongyang", "UTC"}, {"UTC", "America/Sao_Paulo"}, {"Europe/Istanbul", "Asia/Shanghai"}};
+    for (const auto& [from, to] : transition_zones) {
+        EXPECT_FALSE(TimezoneUtils::timezone_offsets(from, to, &offset))
+                << from << " -> " << to << " cached offset " << offset;
+    }
+    ASSERT_TRUE(TimezoneUtils::timezone_offsets("Etc/GMT-8", "UTC", &offset));
+    EXPECT_EQ(-28800, offset);
+    ASSERT_TRUE(TimezoneUtils::timezone_offsets("UTC", "Etc/GMT+5", &offset));
+    EXPECT_EQ(-18000, offset);
+}
+
 } // namespace starrocks
