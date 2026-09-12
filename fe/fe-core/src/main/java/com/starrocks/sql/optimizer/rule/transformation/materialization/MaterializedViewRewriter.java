@@ -2334,7 +2334,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             Map<ColumnRefOperator, ScalarOperator> columnRefMap,
             RewriteContext rewriteContext,
             boolean isViewBased, boolean isQueryToMV, boolean useEc) {
-        EquationRewriter rewriter = new EquationRewriter();
+        EquationRewriter rewriter = new EquationRewriter(rewriteContext);
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
             ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue());

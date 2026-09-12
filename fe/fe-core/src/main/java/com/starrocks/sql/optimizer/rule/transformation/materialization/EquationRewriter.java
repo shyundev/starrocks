@@ -48,12 +48,13 @@ public class EquationRewriter {
     private AggregateFunctionRewriter aggregateFunctionRewriter;
     boolean isUnderAggFuncNormalizerContext;
 
-    private final EquivalentShuttle defaultShuttle = new EquivalentShuttle(new EquivalentShuttleContext(null,
-            false, true, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE));
+    private final EquivalentShuttle defaultShuttle;
 
-    public EquationRewriter() {
+    public EquationRewriter(RewriteContext rewriteContext) {
         this.equationMap = ArrayListMultimap.create();
         this.rewriteEquivalents = Maps.newHashMap();
+        this.defaultShuttle = new EquivalentShuttle(new EquivalentShuttleContext(rewriteContext,
+                false, true, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE));
     }
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {

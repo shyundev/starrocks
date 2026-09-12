@@ -19,6 +19,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
+
+import java.util.Objects;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.getRollupAggregateFunc;
 
@@ -51,6 +54,29 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
         return aggFunc.getChildren().size() == 0 || !aggFunc.getChild(0).isNullable();
     }
 
+    // count(*) and count(<non-null constant>) count every row, so they have no counted expression.
+    private static ScalarOperator getCountedExpr(CallOperator aggFunc) {
+        if (aggFunc.getChildren().isEmpty() || aggFunc.getChild(0).isConstant()) {
+            return null;
+        }
+        return aggFunc.getChild(0);
+    }
+
+    /**
+     * Counts over different expressions count the same rows only when neither expression is ever null.
+     * {@code isNonNullableCount} answers that from the declared nullability of the column, which does not
+     * cover the null rows an outer join extends the null-supplying side with. So under an outer join keep
+     * the equivalence between counts over the same expression only.
+     */
+    private static boolean isCountingSameRows(CallOperator mvAggFunc, CallOperator queryAggFunc,
+                                              EquivalentShuttleContext shuttleContext) {
+        if (Objects.equals(getCountedExpr(mvAggFunc), getCountedExpr(queryAggFunc))) {
+            return true;
+        }
+        RewriteContext rewriteContext = shuttleContext.getRewriteContext();
+        return rewriteContext != null && !rewriteContext.hasOuterJoin();
+    }
+
     @Override
     public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
         if (aggFunc == null) {
@@ -70,6 +96,9 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
                                   ColumnRefOperator replace,
                                   ScalarOperator newInput) {
         if (!check(newInput)) {
+            return null;
+        }
+        if (!isCountingSameRows((CallOperator) eqContext.getInput(), (CallOperator) newInput, shuttleContext)) {
             return null;
         }
         if (shuttleContext.isRollup()) {
