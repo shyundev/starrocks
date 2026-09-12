@@ -338,4 +338,30 @@ public class PredicatePushDownTest extends PlanTestBase {
                 "  |  functions: [, sum(2: v2), ]\n" +
                 "  |  partition by: 1: v1");
     }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown12() throws Exception {
+        // An aggregation above the join enables the join reorder that runs before aggregation push down.
+        String sql = "WITH input AS (select t0.v1, t1.v5 from t0 join t1 on t0.v1=t1.v4) " +
+                "SELECT /*+SET_VAR(cbo_push_down_aggregate_mode=0)*/ count(*) from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  other join predicates: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown13() throws Exception {
+        String sql = "WITH input AS (select t0.v1, t1.v5, t2.v8 from t0 join t1 on t0.v1=t1.v4 " +
+                "join t2 on t0.v1=t2.v7) " +
+                "SELECT /*+SET_VAR(cbo_push_down_aggregate_mode=0)*/ count(*) from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  8:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v7\n" +
+                "  |  other join predicates: rand() < 0.5");
+    }
 }
