@@ -1,0 +1,33 @@
+-- name: test_split_topn_agg_offset
+CREATE TABLE t_split_topn_agg (
+    `k` INT NOT NULL,
+    `v` INT NOT NULL
+)
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_split_topn_agg SELECT x, x FROM TABLE(generate_series(1, 400)) AS g(x);
+-- result:
+-- !result
+SELECT k, count(*) AS c, sum(v) AS s FROM t_split_topn_agg GROUP BY k ORDER BY s DESC LIMIT 3 OFFSET 2;
+-- result:
+398	1	398
+397	1	397
+396	1	396
+-- !result
+SELECT k, count(*) AS c, sum(v) AS s FROM t_split_topn_agg GROUP BY k ORDER BY s DESC LIMIT 3 OFFSET 5;
+-- result:
+395	1	395
+394	1	394
+393	1	393
+-- !result
+SELECT k, count(*) AS c, sum(v) AS s FROM t_split_topn_agg GROUP BY k ORDER BY s DESC LIMIT 3;
+-- result:
+400	1	400
+399	1	399
+398	1	398
+-- !result

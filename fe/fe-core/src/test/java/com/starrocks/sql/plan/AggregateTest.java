@@ -3490,6 +3490,46 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testSplitTopNAggWithOffset() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            // The split-off aggregation picks the candidate groups, so it keeps the rows the outer TopN skips
+            String plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                            + "ORDER BY c DESC LIMIT 10 OFFSET 5;");
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+            assertContains(plan, "  |----9:EXCHANGE\n"
+                    + "  |       limit: 15");
+            Assertions.assertEquals(1, StringUtils.countMatches(plan, "offset: 5"));
+
+            // Without an offset the candidate groups are just the limit
+            plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+            assertContains(plan, "  |----9:EXCHANGE\n"
+                    + "  |       limit: 10");
+
+            // A single aggregation leaves nothing to split off, so the offset stays on the only TopN
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10 OFFSET 5;");
+            assertNotContains(plan, "HASH JOIN");
+            Assertions.assertEquals(1, StringUtils.countMatches(plan, "offset: 5"));
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
     public void testAvoidMergeNonGroupByAgg() throws Exception {
         String plan = getFragmentPlan("SELECT /*+SET_VAR(disable_join_reorder=true)*/ COUNT(*) " +
                 "FROM t0 RIGHT JOIN t1 ON v1 < v4");

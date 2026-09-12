@@ -1,0 +1,19 @@
+-- name: test_split_topn_agg_offset
+
+CREATE TABLE t_split_topn_agg (
+    `k` INT NOT NULL,
+    `v` INT NOT NULL
+)
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t_split_topn_agg SELECT x, x FROM TABLE(generate_series(1, 400)) AS g(x);
+
+SELECT k, count(*) AS c, sum(v) AS s FROM t_split_topn_agg GROUP BY k ORDER BY s DESC LIMIT 3 OFFSET 2;
+-- offset greater than the limit
+SELECT k, count(*) AS c, sum(v) AS s FROM t_split_topn_agg GROUP BY k ORDER BY s DESC LIMIT 3 OFFSET 5;
+-- no offset
+SELECT k, count(*) AS c, sum(v) AS s FROM t_split_topn_agg GROUP BY k ORDER BY s DESC LIMIT 3;

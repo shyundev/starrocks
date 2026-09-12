@@ -77,8 +77,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
         LogicalAggregationOperator agg = input.inputAt(0).getOp().cast();
         LogicalOlapScanOperator scan = input.inputAt(0).inputAt(0).getOp().cast();
 
-        if (topN.getLimit() == Operator.DEFAULT_LIMIT
-                || topN.getLimit() > context.getSessionVariable().getSplitTopNAggLimit()) {
+        // the TopN below the join has to keep offset + limit candidate groups, and that sum can overflow
+        long candidates = topN.getLimit() + topN.getOffset();
+        if (topN.getLimit() == Operator.DEFAULT_LIMIT || candidates < 0
+                || candidates > context.getSessionVariable().getSplitTopNAggLimit()) {
             return false;
         }
         if (scan.getProjection() != null) {
@@ -362,9 +364,12 @@ public class SplitTopNAggregateRule extends TransformationRule {
             }
         }
 
+        // the outer TopN applies the offset, so this one only has to pick the candidate groups
         LogicalTopNOperator newTopN = LogicalTopNOperator.builder()
                 .withOperator(topN)
                 .setOrderByElements(newOrdering)
+                .setLimit(topN.getLimit() + topN.getOffset())
+                .setOffset(0)
                 .setProjection(null)
                 .build();
 
