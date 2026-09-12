@@ -73,6 +73,24 @@ public class MultiJoinNode {
         return true;
     }
 
+    public boolean checkPredicateCoverage() {
+        // Each join on-predicate of a reordered tree is rebuilt from the predicates that connect two atoms.
+        // A predicate covering fewer than two atoms, such as a non-deterministic one that stays on the join
+        // instead of being pushed into a child, is only kept when the original join order is kept.
+        for (ScalarOperator predicate : predicates) {
+            ColumnRefSet predicateColumn = predicate.getUsedColumns();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+                if (predicate.getUsedColumns().contains(entry.getKey())) {
+                    predicateColumn.union(entry.getValue().getUsedColumns());
+                }
+            }
+            if (atoms.stream().filter(atom -> predicateColumn.isIntersect(atom.getOutputColumns())).count() < 2) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static MultiJoinNode toMultiJoinNode(OptExpression node) {
         LinkedHashSet<OptExpression> atoms = new LinkedHashSet<>();
         List<ScalarOperator> predicates = new ArrayList<>();

@@ -201,7 +201,7 @@ public class ReorderJoinRule extends Rule {
                 Integer childIdx = innerJoinRoot.second.second;
 
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(child);
-                if (!multiJoinNode.checkDependsPredicate()) {
+                if (!multiJoinNode.checkDependsPredicate() || !multiJoinNode.checkPredicateCoverage()) {
                     continue;
                 }
 
@@ -251,7 +251,7 @@ public class ReorderJoinRule extends Rule {
             Collections.reverse(innerJoinTrees);
             for (OptExpression innerJoinRoot : innerJoinTrees) {
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(innerJoinRoot);
-                if (!multiJoinNode.checkDependsPredicate()) {
+                if (!multiJoinNode.checkDependsPredicate() || !multiJoinNode.checkPredicateCoverage()) {
                     continue;
                 }
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode, true);
