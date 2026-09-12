@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.BiMap;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -51,6 +52,7 @@ public class RewriteContext {
     private AggregatePushDownContext aggregatePushDownContext;
     // whether this rewritten query is a rollup query
     private boolean isRollup;
+    private Boolean hasOuterJoin;
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
@@ -188,5 +190,16 @@ public class RewriteContext {
 
     public OptimizerContext getOptimizerContext() {
         return optimizerContext;
+    }
+
+    /**
+     * Whether the query or the mv plan contains an outer join which extends one side of the join with null rows.
+     */
+    public boolean hasOuterJoin() {
+        if (hasOuterJoin == null) {
+            hasOuterJoin = MvUtils.getAllJoinOperators(queryExpression).stream().anyMatch(JoinOperator::isOuterJoin)
+                    || MvUtils.getAllJoinOperators(mvExpression).stream().anyMatch(JoinOperator::isOuterJoin);
+        }
+        return hasOuterJoin;
     }
 }

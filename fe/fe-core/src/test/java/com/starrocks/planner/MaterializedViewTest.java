@@ -836,6 +836,44 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testAggregateCountOnOuterJoin() {
+        String leftJoin = " from emps left join locations on emps.locationid = locations.locationid\n" +
+                " group by emps.locationid";
+        // locations.name is not nullable, but the left join extends it with null rows, so
+        // count(locations.name) counts fewer rows than count(*) and count(emps.empid)
+        String mv = "select emps.locationid, count(locations.name) as cnt\n" + leftJoin;
+        testRewriteOK(mv, "select emps.locationid, count(locations.name) as cnt\n" + leftJoin);
+        testRewriteFail(mv, "select emps.locationid, count(*) as cnt\n" + leftJoin);
+        testRewriteFail(mv, "select emps.locationid, count(1) as cnt\n" + leftJoin);
+        testRewriteFail(mv, "select emps.locationid, count(emps.empid) as cnt\n" + leftJoin);
+
+        String countStarMv = "select emps.locationid, count(*) as cnt\n" + leftJoin;
+        testRewriteOK(countStarMv, "select emps.locationid, count(1) as cnt\n" + leftJoin);
+        testRewriteFail(countStarMv, "select emps.locationid, count(locations.name) as cnt\n" + leftJoin);
+
+        // an inner join keeps count(locations.name) and count(*) over the same rows
+        String innerJoin = " from emps join locations on emps.locationid = locations.locationid\n" +
+                " group by emps.locationid";
+        String innerJoinMv = "select emps.locationid, count(locations.name) as cnt\n" + innerJoin;
+        testRewriteOK(innerJoinMv, "select emps.locationid, count(*) as cnt\n" + innerJoin);
+    }
+
+    @Test
+    public void testAggregateAvgOnOuterJoin() {
+        String leftJoin = " from emps left join locations on emps.locationid = locations.locationid\n" +
+                " group by emps.deptno";
+        // avg(locations.locationid) is rewritten into sum(locations.locationid) / count(locations.locationid),
+        // and the left join extends locations.locationid with null rows, so that count is not count(*)
+        String mv = "select emps.deptno, count(*) as cnt, sum(locations.locationid) as s\n" + leftJoin;
+        testRewriteFail(mv, "select emps.deptno, avg(locations.locationid) as a\n" + leftJoin);
+
+        String innerJoin = " from emps join locations on emps.locationid = locations.locationid\n" +
+                " group by emps.deptno";
+        String innerJoinMv = "select emps.deptno, count(*) as cnt, sum(locations.locationid) as s\n" + innerJoin;
+        testRewriteOK(innerJoinMv, "select emps.deptno, avg(locations.locationid) as a\n" + innerJoin);
+    }
+
+    @Test
     public void testAggregate16() throws Exception {
         String mv = "CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1\n" +
                 "DISTRIBUTED BY HASH(col1) BUCKETS 3\n" +
