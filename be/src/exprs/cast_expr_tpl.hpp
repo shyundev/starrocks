@@ -178,8 +178,21 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         if constexpr (lt_is_integer<FromType>) {
             constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
             constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
-            overflow = viewer.value(row) < min || viewer.value(row) > max;
-            value = JsonValue::from_int(viewer.value(row));
+            auto v = viewer.value(row);
+            // A LARGEINT above INT64_MAX still fits the uint64_t range that flat JSON
+            // stores LARGEINT sub-columns as (see flat_json_internal.cpp merge_number),
+            // so encode it unsigned instead of overflowing to NULL.
+            if constexpr (FromType == TYPE_LARGEINT) {
+                if (v > max && v <= static_cast<int128_t>(std::numeric_limits<uint64_t>::max())) {
+                    value = JsonValue::from_uint(static_cast<uint64_t>(v));
+                } else {
+                    overflow = v < min || v > max;
+                    value = JsonValue::from_int(v);
+                }
+            } else {
+                overflow = v < min || v > max;
+                value = JsonValue::from_int(v);
+            }
         } else if constexpr (lt_is_float<FromType>) {
             constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
             constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();

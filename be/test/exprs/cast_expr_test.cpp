@@ -2056,6 +2056,17 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         EXPECT_EQ("10000000000", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, 1E10));
         EXPECT_EQ("", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, RunTimeTypeLimits<TYPE_LARGEINT>::max_value()));
         EXPECT_EQ("", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, RunTimeTypeLimits<TYPE_LARGEINT>::min_value()));
+
+        // A LARGEINT above INT64_MAX is still within uint64_t range and must
+        // round-trip, matching how flat JSON stores LARGEINT sub-columns.
+        int128_t int64_max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
+        int128_t int64_min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
+        int128_t uint64_max = static_cast<int128_t>(std::numeric_limits<uint64_t>::max());
+        EXPECT_EQ("9223372036854775808", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, int64_max + 1));
+        EXPECT_EQ("18446744073709551615", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, uint64_max));
+        EXPECT_EQ("", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, uint64_max + 1));
+        EXPECT_EQ("-1", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, int128_t(-1)));
+        EXPECT_EQ("-9223372036854775808", evaluateCastToJson<TYPE_LARGEINT>(cast_expr, int64_min));
     }
 
     // double/float
