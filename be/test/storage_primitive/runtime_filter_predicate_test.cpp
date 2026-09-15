@@ -16,16 +16,23 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <limits>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/object_pool.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/bucket_aware_partition.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_builder.h"
+#include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_filter_layout.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"
@@ -72,6 +79,20 @@ TRuntimeFilterDescription make_local_hash_bucket_desc(int32_t filter_id) {
     return desc;
 }
 
+// What FE emits for a broadcast join with no bucket transform: no layout, so the storage-layer
+// predicate takes the selection-aware path.
+TRuntimeFilterDescription make_broadcast_desc(int32_t filter_id) {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(filter_id);
+    desc.__set_has_remote_targets(false);
+    desc.__set_build_plan_node_id(5);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+    desc.__set_filter_type(TRuntimeFilterBuildType::JOIN_FILTER);
+    desc.__set_plan_node_id_to_target_expr(
+            {{kProbeNodeId, ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(kProbeSlotId, true)}});
+    return desc;
+}
+
 // The sub-filter index the operator-level probe assigns to each row: the murmur3 bucket
 // transform, then bucketseq_to_instance.
 std::vector<uint32_t> operator_partitions(const RuntimeFilterLayout& layout, const Column* column) {
@@ -107,6 +128,49 @@ protected:
         auto* desc = _pool.add(new RuntimeFilterProbeDescriptor());
         CHECK(desc->init(&_pool, make_local_hash_bucket_desc(filter_id), kProbeNodeId, &_runtime_state).ok());
         return desc;
+    }
+
+    RuntimeFilterProbeDescriptor* make_broadcast_probe_desc(int32_t filter_id) {
+        auto* desc = _pool.add(new RuntimeFilterProbeDescriptor());
+        CHECK(desc->init(&_pool, make_broadcast_desc(filter_id), kProbeNodeId, &_runtime_state).ok());
+        return desc;
+    }
+
+    static ColumnPtr make_nullable_int_column(const std::vector<std::optional<int32_t>>& values) {
+        auto data = Int32Column::create();
+        auto nulls = NullColumn::create();
+        for (const auto& value : values) {
+            data->append(value.value_or(0));
+            nulls->append(value.has_value() ? 0 : 1);
+        }
+        return NullableColumn::create(std::move(data), std::move(nulls));
+    }
+
+    // The filter a null-safe equi-join builds: RuntimeFilterBuilder::fill() with eq_null, which
+    // is what turns on has_null().
+    RuntimeFilter* make_null_safe_join_filter(RuntimeFilterSerializeType rf_type,
+                                              const std::vector<std::optional<int32_t>>& build_values) {
+        auto* filter =
+                RuntimeFilterFactory::create_filter(&_pool, rf_type, TYPE_INT, TRuntimeFilterBuildJoinMode::BROADCAST);
+        CHECK(filter != nullptr);
+        if (rf_type == RuntimeFilterSerializeType::BITSET_FILTER) {
+            // The bitset spans [min, max] of the build keys, and init() sizes it from that range.
+            int32_t min_value = std::numeric_limits<int32_t>::max();
+            int32_t max_value = std::numeric_limits<int32_t>::min();
+            for (const auto& value : build_values) {
+                if (value.has_value()) {
+                    min_value = std::min(min_value, *value);
+                    max_value = std::max(max_value, *value);
+                }
+            }
+            down_cast<RuntimeBitsetFilter<TYPE_INT>*>(filter->get_membership_filter())
+                    ->set_min_max(min_value, max_value);
+        }
+        filter->get_membership_filter()->init(build_values.size());
+        CHECK(RuntimeFilterBuilder::fill(filter, TYPE_INT, make_nullable_int_column(build_values), 0, true /*eq_null*/)
+                      .ok());
+        CHECK(filter->has_null());
+        return filter;
     }
 
     // A partitioned bloom filter whose sub-filter i holds exactly the values the
@@ -207,6 +271,54 @@ TEST_F(RuntimeFilterPredicateTest, SelectionAwareOverloadsIgnoreBucketProperties
                                     static_cast<uint16_t>(column->size()), selection_hash_values, &selection_ctx);
 
     EXPECT_NE(operator_ctx.hash_values, selection_hash_values);
+}
+
+// The storage layer runs the runtime filter over the selection the table's own conjuncts already
+// produced, so the filter may only narrow it. A null-safe equi-join's filter matches null keys,
+// and a filter that matches has to leave a row alone rather than select it: rows the conjuncts
+// rejected would otherwise come back and violate the WHERE clause.
+TEST_F(RuntimeFilterPredicateTest, NullKeysDoNotResurrectRejectedRows) {
+    // Both membership filters a join can pick, each carrying the min-max filter alongside.
+    const std::vector<std::pair<RuntimeFilterSerializeType, std::vector<std::optional<int32_t>>>> cases = {
+            {RuntimeFilterSerializeType::BITSET_FILTER, {1000, 1001, 1002, std::nullopt}},
+            {RuntimeFilterSerializeType::BLOOM_FILTER, {1000, 40000000, std::nullopt}}};
+
+    int32_t filter_id = 10;
+    for (const auto& [rf_type, build_values] : cases) {
+        auto* desc = make_broadcast_probe_desc(++filter_id);
+        desc->set_runtime_filter(make_null_safe_join_filter(rf_type, build_values));
+
+        RuntimeFilterPredicate pred(desc, kProbeSlotId);
+        ASSERT_TRUE(pred.init(0 /*driver_sequence*/));
+
+        // No probe key is in the build side, so only the null keys can match.
+        constexpr uint16_t kNumRows = 64;
+        std::vector<std::optional<int32_t>> probe_values;
+        for (uint16_t i = 0; i < kNumRows; ++i) {
+            probe_values.emplace_back(i % 4 == 0 ? std::nullopt : std::optional<int32_t>(i));
+        }
+        auto column = make_nullable_int_column(probe_values);
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(column, static_cast<ColumnId>(kProbeSlotId), true);
+
+        // What the conjuncts left behind: every eighth row rejected, null keys among them.
+        std::vector<uint8_t> selection(kNumRows);
+        for (uint16_t i = 0; i < kNumRows; ++i) {
+            selection[i] = i % 8 == 0 ? 0 : 1;
+        }
+        ASSERT_OK(pred.evaluate(chunk.get(), selection.data(), 0, kNumRows));
+
+        for (uint16_t i = 0; i < kNumRows; ++i) {
+            if (i % 8 == 0) {
+                EXPECT_EQ(selection[i], 0) << "row " << i << " was rejected by the conjuncts but came back";
+            } else if (i % 4 == 0) {
+                EXPECT_EQ(selection[i], 1) << "row " << i << " has a null key the filter matches";
+            } else {
+                EXPECT_EQ(selection[i], 0) << "row " << i << " has a key the build side never saw";
+            }
+        }
+    }
 }
 
 } // namespace starrocks

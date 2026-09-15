@@ -1,0 +1,66 @@
+-- name: test_null_safe_join_runtime_filter_pushdown
+CREATE TABLE `t_probe` (
+  `id` int NOT NULL,
+  `k` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `t_build` (
+  `id` int NOT NULL,
+  `k` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_probe
+select generate_series, if(generate_series % 100 = 0, NULL, generate_series)
+from TABLE(generate_series(1, 200000));
+-- result:
+-- !result
+insert into t_build values (1, NULL);
+-- result:
+-- !result
+select count(*) from t_build b join t_probe p on b.k <=> p.k where p.id < 1000;
+-- result:
+9
+-- !result
+select max(p.id) from t_build b join t_probe p on b.k <=> p.k where p.id < 1000;
+-- result:
+900
+-- !result
+drop table t_probe force;
+-- result:
+-- !result
+drop table t_build force;
+-- result:
+-- !result
+-- name: test_null_safe_join_runtime_filter_split_topn
+CREATE TABLE `t_topn` (
+  `id` int NOT NULL,
+  `k` int NULL,
+  `d` int NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_topn
+select generate_series, if(generate_series % 4 = 0, NULL, generate_series % 100), generate_series % 10
+from TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+select k, count(*) as c, min(d) as min_d from t_topn where d > 0 group by k order by c desc, k limit 3;
+-- result:
+None	200	2
+1	10	1
+2	10	2
+-- !result
+drop table t_topn force;
+-- result:
+-- !result

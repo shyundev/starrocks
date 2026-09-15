@@ -67,6 +67,17 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
                                          &_running_ctx);
         }
     }
+    // `selection` carries what the preceding conjuncts kept, and every predicate in the chain may
+    // only narrow it.  RuntimeFilter::evaluate() assigns has_null() to the null rows rather than
+    // conjoining it, which for a null-safe equi-join re-selects rows those conjuncts rejected.
+    if (_rf->has_null()) {
+        _selection_before_filter.assign(selection + from, selection + to);
+        _rf->evaluate(column.get(), hash_values, selection, from, to);
+        for (uint16_t i = from; i < to; i++) {
+            selection[i] &= _selection_before_filter[i - from];
+        }
+        return Status::OK();
+    }
     _rf->evaluate(column.get(), hash_values, selection, from, to);
     return Status::OK();
 }
