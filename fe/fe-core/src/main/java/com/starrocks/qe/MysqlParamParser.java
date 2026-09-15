@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.common.ErrorType;
@@ -43,15 +44,20 @@ public final class MysqlParamParser {
     }
 
     public static LiteralExpr createLiteral(int mysqlTypeCode, ByteBuffer data) throws AnalysisException {
-        switch (mysqlTypeCode) {
+        // the type is followed by a flags byte, of which only UNSIGNED_FLAG affects how the value is read
+        boolean unsigned = (mysqlTypeCode & 0x8000) != 0;
+        switch (mysqlTypeCode & 0xff) {
             case 0: // MYSQL_TYPE_DECIMAL
                 return new DecimalLiteral(readLengthEncodedString(data));
             case 1: // MYSQL_TYPE_TINY
-                return new IntLiteral(readIntegerValue(PrimitiveType.TINYINT, data), IntegerType.TINYINT);
+                return createIntLiteral(readIntegerValue(PrimitiveType.TINYINT, data, unsigned), IntegerType.TINYINT,
+                        unsigned);
             case 2: // MYSQL_TYPE_SHORT
-                return new IntLiteral(readIntegerValue(PrimitiveType.SMALLINT, data), IntegerType.SMALLINT);
+                return createIntLiteral(readIntegerValue(PrimitiveType.SMALLINT, data, unsigned),
+                        IntegerType.SMALLINT, unsigned);
             case 3: // MYSQL_TYPE_LONG
-                return new IntLiteral(readIntegerValue(PrimitiveType.INT, data), IntegerType.INT);
+                return createIntLiteral(readIntegerValue(PrimitiveType.INT, data, unsigned), IntegerType.INT,
+                        unsigned);
             case 4: // MYSQL_TYPE_FLOAT
                 return new FloatLiteral((double) data.getFloat(), FloatType.FLOAT);
             case 5: // MYSQL_TYPE_DOUBLE
@@ -61,7 +67,11 @@ public final class MysqlParamParser {
             case 17: // MYSQL_TYPE_TIMESTAMP2
                 return createDatetimeLiteral(DateType.DATETIME, data);
             case 8: // MYSQL_TYPE_LONGLONG
-                return new IntLiteral(readIntegerValue(PrimitiveType.BIGINT, data), IntegerType.BIGINT);
+                long value = readIntegerValue(PrimitiveType.BIGINT, data, unsigned);
+                if (unsigned && value < 0) {
+                    return new LargeIntLiteral(Long.toUnsignedString(value));
+                }
+                return new IntLiteral(value, IntegerType.BIGINT);
             case 10: // MYSQL_TYPE_DATE
                 return createDateLiteral(DateType.DATE, data);
             case 15: // MYSQL_TYPE_VARCHAR
@@ -74,15 +84,20 @@ public final class MysqlParamParser {
         }
     }
 
-    private static long readIntegerValue(PrimitiveType primitiveType, ByteBuffer data) {
+    private static LiteralExpr createIntLiteral(long value, Type type, boolean unsigned) {
+        // an unsigned value may not fit the signed type of the same width, so pick the type by value
+        return unsigned ? new IntLiteral(value) : new IntLiteral(value, type);
+    }
+
+    private static long readIntegerValue(PrimitiveType primitiveType, ByteBuffer data, boolean unsigned) {
         switch (primitiveType) {
             case BOOLEAN:
             case TINYINT:
-                return data.get();
+                return unsigned ? Byte.toUnsignedInt(data.get()) : data.get();
             case SMALLINT:
-                return data.getChar();
+                return unsigned ? data.getChar() : data.getShort();
             case INT:
-                return data.getInt();
+                return unsigned ? Integer.toUnsignedLong(data.getInt()) : data.getInt();
             case BIGINT:
                 return data.getLong();
             default:
