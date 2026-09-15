@@ -196,6 +196,12 @@ public class ArithmeticExpr extends Expr {
             return false;
         }
 
+        // Integer multiplication wraps around on overflow, so the product is not ordered by the
+        // operand over the whole domain of a fixed point type.
+        if (op == Operator.MULTIPLY && getType().isFixedPointType()) {
+            return false;
+        }
+
         return op.isMonotonic();
     }
 }
