@@ -189,14 +189,14 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("partial_mv_6")
                 .contains("     TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 9: c2 < 3000, (9: c2 >= 2000) OR (9: c2 IS NULL)\n" +
+                        "     PREDICATES: 10: c3 < 3000, 9: c2 < 3000, (9: c2 >= 2000) OR (9: c2 IS NULL)\n" +
                         "     partitions=5/5");
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
                 .contains("partial_mv_6")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 < 1000\n" +
+                        "     PREDICATES: 7: c2 < 1000, 6: c3 < 1000\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=6/6");
@@ -422,6 +422,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 6: c3 < 1000\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_7\n" +
                         "     tabletRatio=6/6");
@@ -478,7 +479,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 = 1\n" +
+                        "     PREDICATES: 5: c1 = 1, 6: c3 < 1000\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=3/6");
@@ -487,7 +488,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c2 > 100 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 = 1, 7: c2 > 100\n" +
+                        "     PREDICATES: 5: c1 = 1, 7: c2 > 100, 6: c3 < 1000\n" +
                         "     partitions=3/5");
 
         // test non match

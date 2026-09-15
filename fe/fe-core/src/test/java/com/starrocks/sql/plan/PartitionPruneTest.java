@@ -193,6 +193,34 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPredicatePruneKeepsNullPartitionValue() throws Exception {
+        // d2 is nullable, so rows whose d2 is NULL are stored in the first partition. Dropping the d2
+        // predicate from the scan lets those rows out unless another predicate rejects them.
+        String sql = getFragmentPlan("select * from ptest where d2 < '2020-01-01' and k1 > 0;");
+        assertTrue(sql.contains("     TABLE: ptest\n"
+                + "     PREAGGREGATION: ON\n"
+                + "     PREDICATES: 2: d2 < '2020-01-01', 1: k1 > 0\n"
+                + "     partitions=1/4\n"
+                + "     rollup: ptest"));
+
+        // the range predicate is still dropped when a remaining predicate rejects the NULL rows
+        sql = getFragmentPlan("select * from ptest where d2 < '2020-01-01' and d2 is not null;");
+        assertTrue(sql.contains("     TABLE: ptest\n"
+                + "     PREAGGREGATION: ON\n"
+                + "     PREDICATES: 2: d2 IS NOT NULL\n"
+                + "     partitions=1/4\n"
+                + "     rollup: ptest"));
+
+        // and when the partition holding the NULL rows is pruned away
+        sql = getFragmentPlan("select * from ptest where d2 >= '2020-01-01' and k1 > 0;");
+        assertTrue(sql.contains("     TABLE: ptest\n"
+                + "     PREAGGREGATION: ON\n"
+                + "     PREDICATES: 1: k1 > 0\n"
+                + "     partitions=3/4\n"
+                + "     rollup: ptest"));
+    }
+
+    @Test
     public void testPruneNullPredicate() throws Exception {
         String sql = "select * from ptest where (cast(d2 as int) / null) is null";
         String plan = getFragmentPlan(sql);

@@ -300,7 +300,7 @@ public class OptOlapPartitionPruner {
         }
 
         if (column.isAllowNull() && containsNullValue(minRange)
-                && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
+                && !filtersNullPartitionValue(scanPredicates, columnName)) {
             return null;
         }
 
@@ -478,36 +478,28 @@ public class OptOlapPartitionPruner {
         }
     }
 
-    private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
+    // Rows whose partition column is NULL are stored in the minimum partition, and every removed predicate
+    // compares that column with a non-NULL bound, so it rejects them. Dropping those predicates returns the
+    // same rows only while one of the remaining conjuncts, evaluated with the partition column set to NULL,
+    // is NULL or false.
+    private static boolean filtersNullPartitionValue(List<ScalarOperator> scanPredicates, String columnName) {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        ScalarOperator newPredicate = Utils.compoundAnd(scanPredicates);
-        boolean newPredicateFilterNulls = false;
-        boolean predicateFilterNulls = false;
-
         BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
             @Override
             public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-                return ConstantOperator.createNull(variable.getType());
+                return variable.getName().equalsIgnoreCase(columnName)
+                        ? ConstantOperator.createNull(variable.getType()) : variable;
             }
         };
 
-        if (newPredicate != null) {
-            newPredicate = newPredicate.accept(shuttle, null);
-
-            ScalarOperator value = scalarRewriter.rewrite(newPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            if ((value.isConstantRef() && ((ConstantOperator) value).isNull()) ||
-                    value.equals(ConstantOperator.createBoolean(false))) {
-                newPredicateFilterNulls = true;
+        for (ScalarOperator predicate : scanPredicates) {
+            ScalarOperator value = scalarRewriter.rewrite(predicate.accept(shuttle, null),
+                    ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if ((value.isConstantRef() && ((ConstantOperator) value).isNull())
+                    || value.equals(ConstantOperator.createBoolean(false))) {
+                return true;
             }
         }
-
-        predicate = predicate.accept(shuttle, null);
-        ScalarOperator value = scalarRewriter.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        if ((value.isConstantRef() && ((ConstantOperator) value).isNull())
-                || value.equals(ConstantOperator.createBoolean(false))) {
-            predicateFilterNulls = true;
-        }
-
-        return newPredicateFilterNulls == predicateFilterNulls;
+        return false;
     }
 }
