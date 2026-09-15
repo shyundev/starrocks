@@ -103,8 +103,10 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
     size_t stack_size = 0;
 
     for (size_t i = 0; i < length; ++i) {
-        if (is_quote(src[i])) {
-            if (!stack.empty() && src[i] == stack.back()) {
+        // Inside a quoted element, a quote character of the other kind is part of
+        // the literal content, not a new quote boundary.
+        if (is_quote(src[i]) && (stack.empty() || stack.back() == src[i])) {
+            if (!stack.empty()) {
                 stack.pop_back();
             } else {
                 stack.push_back(src[i]);

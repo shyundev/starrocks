@@ -2213,7 +2213,14 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ(R"(['['])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['['])"));
     EXPECT_EQ(R"(['"'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"'])"));
     EXPECT_EQ(R"(['"xxx'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"xxx'])"));
-    EXPECT_EQ(R"(['"', ','])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"', ','])"));
+    EXPECT_EQ(R"(['"',','])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"', ','])"));
+
+    // A quote character of the other kind inside a quoted element must stay part
+    // of the element content instead of splitting or merging elements.
+    EXPECT_EQ(R"(['o'p','x'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["o'p","x"])"));
+    EXPECT_EQ(R"(['don't','x','y'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["don't","x","y"])"));
+    EXPECT_EQ(R"(['a"b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['a"b'])"));
+    EXPECT_EQ(R"(['it's','ok'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["it's",ok])"));
 
     // test child type
     {
@@ -2304,6 +2311,25 @@ TEST_F(VectorizedCastExprTest, string_split_test) {
         res.clear();
         a = R"(["1"]][["1,3"],["2"],["1"]])";
         array_delimeter_split(a, res, stack);
+
+        // case 5: a quote of the other kind inside a quoted element stays literal
+        res.clear();
+        a = R"("o'p","x")";
+        array_delimeter_split(a, res, stack);
+        EXPECT_EQ(res[0], Slice(R"("o'p")"));
+        EXPECT_EQ(res[1], Slice(R"("x")"));
+
+        res.clear();
+        a = R"("don't","x","y")";
+        array_delimeter_split(a, res, stack);
+        EXPECT_EQ(res[0], Slice(R"("don't")"));
+        EXPECT_EQ(res[1], Slice(R"("x")"));
+        EXPECT_EQ(res[2], Slice(R"("y")"));
+
+        res.clear();
+        a = R"('a"b')";
+        array_delimeter_split(a, res, stack);
+        EXPECT_EQ(res[0], Slice(R"('a"b')"));
     }
 }
 
