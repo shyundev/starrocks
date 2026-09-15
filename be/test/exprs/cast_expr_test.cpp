@@ -2227,6 +2227,24 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
         //  select cast('[[4],[[1, 2]]]' as array<array<array<string>>>);
         EXPECT_EQ(R"([[['4']],[['1','2']]])", cast_string_to_array(cast_expr, type, R"([[[4]],[[1, 2]]])"));
     }
+
+    // Non-string element types printed with their own JSON-style quotes must be
+    // unquoted before being cast, matching what StarRocks itself prints for the
+    // same array type (e.g. CAST(x AS ARRAY<DATE>) prints ["2024-01-05"]).
+    EXPECT_EQ(R"([2024-01-05])", cast_string_to_array(cast_expr, TYPE_DATE, R"(["2024-01-05"])"));
+    EXPECT_EQ(R"([2024-01-05])", cast_string_to_array(cast_expr, TYPE_DATE, R"([2024-01-05])"));
+    EXPECT_EQ(R"([2024-01-05 10:11:12])", cast_string_to_array(cast_expr, TYPE_DATETIME, R"(["2024-01-05 10:11:12"])"));
+    EXPECT_EQ("[1]", cast_string_to_array(cast_expr, TYPE_BOOLEAN, R"(["true"])"));
+    EXPECT_EQ("[1]", cast_string_to_array(cast_expr, TYPE_INT, R"(["1"])"));
+
+    // nested array of a non-string type
+    {
+        auto type = gen_multi_array_type_desc(to_thrift(TYPE_DATE), 2);
+        EXPECT_EQ(R"([[2024-01-05]])", cast_string_to_array(cast_expr, type, R"([["2024-01-05"]])"));
+    }
+
+    // JSON element quotes are part of the JSON value itself, so they must stay.
+    EXPECT_EQ(R"(["a"])", cast_string_to_array(cast_expr, TYPE_JSON, R"(["a"])"));
 }
 
 // Test string to array with const input

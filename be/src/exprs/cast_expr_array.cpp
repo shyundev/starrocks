@@ -194,14 +194,15 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
             std::vector<Slice> splited_slice;
             array_delimeter_split(slice, splited_slice, stack);
 
-            // Unquote slice for string type
-            if (element_type == TYPE_VARCHAR || element_type == TYPE_CHAR) {
+            // Unquote slice for every element type except JSON, whose quotes are
+            // part of the JSON string value itself.
+            if (element_type == TYPE_JSON) {
                 for (auto& piece : splited_slice) {
-                    slice_builder.append(_unquote(piece));
+                    slice_builder.append(piece);
                 }
             } else {
                 for (auto& piece : splited_slice) {
-                    slice_builder.append(piece);
+                    slice_builder.append(_unquote(piece));
                 }
             }
 
