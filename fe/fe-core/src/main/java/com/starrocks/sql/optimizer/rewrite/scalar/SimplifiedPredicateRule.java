@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -49,7 +50,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
@@ -587,15 +587,17 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 ConstantOperator.createVarchar(mergePath)), child.getFunction());
     }
 
-    private static ScalarOperator lookupChild(ScalarOperator call, Predicate<ScalarOperator> predicate) {
-        if (predicate.test(call)) {
-            return call;
+    // from_unixtime returns a string, so the analyzer wraps it in a cast to the datetime that hour() takes.
+    // That cast is the only thing this rule may look through: any other operator between hour() and the
+    // call it rewrites contributes to the hour that is read, e.g. hour(date_add(from_unixtime(ts), INTERVAL
+    // 8 HOUR)), and a cast to a different type drops it, e.g. hour(cast(from_unixtime(ts) as date)).
+    private static ScalarOperator lookupArgument(CallOperator call, String fnName) {
+        ScalarOperator arg = call.getChild(0);
+        while (arg instanceof CastOperator && arg.getType().isDatetime()) {
+            arg = arg.getChild(0);
         }
-        for (ScalarOperator child : call.getChildren()) {
-            ScalarOperator res = lookupChild(child, predicate);
-            if (res != null) {
-                return res;
-            }
+        if (arg instanceof CallOperator && ((CallOperator) arg).getFnName().equalsIgnoreCase(fnName)) {
+            return arg;
         }
         return null;
     }
@@ -608,9 +610,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         // Case 1: hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
-        ScalarOperator fromUnixTime = lookupChild(call,
-                x -> x instanceof CallOperator &&
-                        ((CallOperator) x).getFnName().equalsIgnoreCase(FunctionSet.FROM_UNIXTIME));
+        ScalarOperator fromUnixTime = lookupArgument(call, FunctionSet.FROM_UNIXTIME);
         if (fromUnixTime != null) {
             // Keep original behavior: only succeeds when argument list matches hour_from_unixtime signature
             Type[] argTypes = fromUnixTime.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
@@ -624,9 +624,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         // Case 2: hour(to_datetime(ts)) or hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
-        ScalarOperator toDatetime = lookupChild(call,
-                x -> x instanceof CallOperator &&
-                        ((CallOperator) x).getFnName().equalsIgnoreCase(FunctionSet.TO_DATETIME));
+        ScalarOperator toDatetime = lookupArgument(call, FunctionSet.TO_DATETIME);
         if (toDatetime != null) {
             List<ScalarOperator> args = toDatetime.getChildren();
             ScalarOperator tsArg;
