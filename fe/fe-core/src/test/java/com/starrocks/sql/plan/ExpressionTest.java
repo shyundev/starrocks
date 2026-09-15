@@ -1014,11 +1014,32 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select t1a from test_all_type where years_sub(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_sub(8: id_datetime, 2) = '2020-12-21 00:00:00'");
 
         sql = "select t1a from test_all_type where years_add(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_add(8: id_datetime, 2) = '2020-12-21 00:00:00'");
+    }
+
+    // months_add and years_add clamp to the end of the target month, so the opposite function does not
+    // invert them: 2024-03-30 and 2024-03-31 both map to 2024-04-30, and months_sub('2024-03-30', 1) is
+    // 2024-02-29, which months_add maps to 2024-03-29. Both directions are kept on the column.
+    @Test
+    public void testMonthArithmeticNotCommutative() throws Exception {
+        String sql = "select t1a from test_all_type where months_add(id_date, 1) = '2024-03-30'";
+        assertContains(getFragmentPlan(sql), "PREDICATES: months_add(CAST(9: id_date AS DATETIME), 1) = "
+                + "'2024-03-30 00:00:00'");
+
+        sql = "select t1a from test_all_type where months_add(id_date, 1) <= '2024-04-30'";
+        assertContains(getFragmentPlan(sql), "PREDICATES: months_add(CAST(9: id_date AS DATETIME), 1) <= "
+                + "'2024-04-30 00:00:00'");
+
+        sql = "select t1a from test_all_type where years_add(id_date, 1) <= '2025-02-28'";
+        assertContains(getFragmentPlan(sql), "PREDICATES: years_add(CAST(9: id_date AS DATETIME), 1) <= "
+                + "'2025-02-28 00:00:00'");
+
+        sql = "select t1a from test_all_type where days_add(id_date, 1) = '2024-03-30'";
+        assertContains(getFragmentPlan(sql), "PREDICATES: 9: id_date = '2024-03-29'");
     }
 
     @Test
