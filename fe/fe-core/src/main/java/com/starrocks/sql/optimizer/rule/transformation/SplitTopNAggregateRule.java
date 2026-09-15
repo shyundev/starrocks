@@ -77,8 +77,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
         LogicalAggregationOperator agg = input.inputAt(0).getOp().cast();
         LogicalOlapScanOperator scan = input.inputAt(0).inputAt(0).getOp().cast();
 
-        if (topN.getLimit() == Operator.DEFAULT_LIMIT
-                || topN.getLimit() > context.getSessionVariable().getSplitTopNAggLimit()) {
+        // the TopN below the join has to keep offset + limit candidate groups, and that sum can overflow
+        long candidates = topN.getLimit() + topN.getOffset();
+        if (topN.getLimit() == Operator.DEFAULT_LIMIT || candidates < 0
+                || candidates > context.getSessionVariable().getSplitTopNAggLimit()) {
             return false;
         }
         if (scan.getProjection() != null) {
@@ -269,7 +271,9 @@ public class SplitTopNAggregateRule extends TransformationRule {
         // build join
         List<ScalarOperator> eqPredicate = Lists.newArrayList();
         for (ColumnRefOperator groupingKey : agg.getGroupingKeys()) {
-            eqPredicate.add(new BinaryPredicateOperator(BinaryType.EQ, groupingKey, refToNew.get(groupingKey)));
+            // the aggregation below emits one group for the NULL key, so a nullable key must match null-safely
+            BinaryType eqType = groupingKey.isNullable() ? BinaryType.EQ_FOR_NULL : BinaryType.EQ;
+            eqPredicate.add(new BinaryPredicateOperator(eqType, groupingKey, refToNew.get(groupingKey)));
         }
 
         LogicalJoinOperator join = LogicalJoinOperator.builder()
@@ -362,9 +366,12 @@ public class SplitTopNAggregateRule extends TransformationRule {
             }
         }
 
+        // the outer TopN applies the offset, so this one only has to pick the candidate groups
         LogicalTopNOperator newTopN = LogicalTopNOperator.builder()
                 .withOperator(topN)
                 .setOrderByElements(newOrdering)
+                .setLimit(topN.getLimit() + topN.getOffset())
+                .setOffset(0)
                 .setProjection(null)
                 .build();
 

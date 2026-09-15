@@ -1,0 +1,20 @@
+-- name: test_split_topn_agg_null_group_key
+
+CREATE TABLE t_split_topn_agg_null (
+    `k` INT NOT NULL,
+    `gk` INT NULL,
+    `gk2` INT NULL,
+    `v` INT NOT NULL
+)
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t_split_topn_agg_null SELECT x, if(x % 50 = 0, NULL, x % 50), if(x % 50 = 0, NULL, x % 7), if(x % 50 = 0, -x, x) FROM TABLE(generate_series(1, 500)) AS g(x);
+
+-- the group whose key is NULL sorts first
+SELECT gk, min(v) AS mn, max(k) AS mx FROM t_split_topn_agg_null GROUP BY gk ORDER BY mn LIMIT 3;
+-- both keys are NULL in the group that sorts first
+SELECT gk, gk2, min(v) AS mn, max(k) AS mx FROM t_split_topn_agg_null GROUP BY gk, gk2 ORDER BY mn LIMIT 1;
