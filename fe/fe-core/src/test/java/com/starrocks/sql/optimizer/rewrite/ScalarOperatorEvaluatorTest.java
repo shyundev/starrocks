@@ -26,12 +26,15 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -266,6 +269,24 @@ public class ScalarOperatorEvaluatorTest {
         Assertions.assertTrue(bigInt.getBigint() == 1L);
         ConstantOperator largeInt = ConstantOperator.createExampleValueByType(IntegerType.LARGEINT);
         Assertions.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
+    }
+
+    @Test
+    public void evaluationDecimalDivideKeepsDeclaredReturnType() {
+        Type lhsType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 1);
+        Type rhsType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
+        Type returnType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 7);
+        BigDecimal dividend = new BigDecimal("1234567890123456789.0");
+
+        CallOperator operator = constantFunctionCall(FunctionSet.DIVIDE, returnType,
+                ConstantOperator.createDecimal(dividend, lhsType),
+                ConstantOperator.createDecimal(BigDecimal.ONE, rhsType));
+
+        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
+
+        assertEquals(OperatorType.CONSTANT, result.getOpType());
+        assertEquals(returnType, result.getType());
+        assertEquals(0, dividend.compareTo(((ConstantOperator) result).getDecimal()));
     }
 
     private static CallOperator constantFunctionCall(String fnName, Type returnType, ConstantOperator... args) {

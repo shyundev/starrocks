@@ -22,6 +22,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -294,6 +295,13 @@ public class ConstantExpressionTest extends PlanTestBase {
         testFragmentPlanContainsConstExpr(
                 "select 1 / 10.0;",
                 "0.1");
+    }
+
+    @Test
+    public void testDecimalArithmeticDivideLiteralType() throws Exception {
+        String plan = UtFrameUtils.getPlanThriftString(starRocksAssert.getCtx(),
+                "select 1234567890123456789.0 / 1");
+        Assertions.assertTrue(plan.contains("type:DECIMAL128, precision:38, scale:7"), plan);
     }
 
     @Test

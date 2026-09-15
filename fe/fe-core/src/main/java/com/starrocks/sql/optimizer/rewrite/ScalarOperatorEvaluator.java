@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
@@ -196,7 +197,8 @@ public enum ScalarOperatorEvaluator {
             ConstantOperator operator = invoker.invoke(root.getChildren());
             // check return result type, decimal will change return type
             if (!operator.isNull() &&
-                    operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
+                    (operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType() ||
+                            decimalScaleDiffers(operator.getType(), fn.getReturnType()))) {
                 Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
                 Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
                 if (operator.getType().isDecimal256()) {
@@ -256,6 +258,16 @@ public enum ScalarOperatorEvaluator {
 
         FunctionInvoker invoker = getFunctionInvoker(signature);
         return invoker != null;
+    }
+
+    // A folded decimal constant takes the type of the digits its value carries, which can be narrower
+    // than the declared return type. A decimal literal is packed with the scale of its own type, so the
+    // narrower scale sends the value into a wider slot off by a power of ten.
+    private static boolean decimalScaleDiffers(Type foldedType, Type declaredType) {
+        if (!foldedType.isDecimalV3() || !declaredType.isDecimalV3() || declaredType.isWildcardDecimal()) {
+            return false;
+        }
+        return ((ScalarType) foldedType).getScalarScale() != ((ScalarType) declaredType).getScalarScale();
     }
 
     private FunctionInvoker getFunctionInvoker(FunctionSignature signature) {
