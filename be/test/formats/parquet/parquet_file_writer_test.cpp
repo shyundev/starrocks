@@ -28,6 +28,8 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
+#include "column/variant_encoder.h"
 #include "common/config_exec_fwd.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
@@ -533,6 +535,61 @@ TEST_F(ParquetFileWriterTest, TestWriteStruct) {
     ASSERT_TRUE(read_chunk != nullptr);
     ASSERT_EQ(read_chunk->num_rows(), 4);
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(ParquetFileWriterTest, TestWriteRequiredStruct) {
+    auto type_int_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    type_int_struct.children = {TYPE_SMALLINT_DESC, TYPE_INT_DESC};
+    type_int_struct.field_names = {"a", "b"};
+    std::vector<TypeDescriptor> type_descs{type_int_struct};
+
+    auto build_struct_column = [&]() {
+        Columns fields{ColumnTestHelper::build_nullable_column<int16_t>({1, 2, -99}, {0, 0, 1}),
+                       ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3}, {0, 0, 0})};
+        return StructColumn::create(std::move(fields), type_int_struct.field_names);
+    };
+
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {false}));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(build_struct_column(), 0);
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 3);
+
+    auto expected_chunk = std::make_shared<Chunk>();
+    expected_chunk->append_column(NullableColumn::create(build_struct_column(), NullColumn::create(3, 0)), 0);
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    ASSERT_EQ(read_chunk->num_rows(), 3);
+    parquet::Utils::assert_equal_chunk(expected_chunk.get(), read_chunk.get());
+}
+
+TEST_F(ParquetFileWriterTest, TestWriteRequiredVariant) {
+    std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARIANT)};
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {false}));
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto variant_col = VariantColumn::create();
+        for (const auto* json : {R"({"a":1})", R"({"a":2})", R"({"a":3})"}) {
+            ASSIGN_OR_ABORT(auto row, VariantEncoder::encode_json_text_to_variant(json));
+            variant_col->append(row);
+        }
+        chunk->append_column(std::move(variant_col), 0);
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 3);
 }
 
 TEST_F(ParquetFileWriterTest, TestWriteMap) {

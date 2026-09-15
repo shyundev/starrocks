@@ -633,9 +633,8 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
     auto rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
 
-    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, rep_levels,
-                                    ctx._max_def_level + node->is_optional(), ctx._max_rep_level,
-                                    ctx._repeated_ancestor_def_level);
+    LevelBuilderContext derived_ctx(ctx._num_levels, def_levels, rep_levels, ctx._max_def_level + node->is_optional(),
+                                    ctx._max_rep_level, ctx._repeated_ancestor_def_level);
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         ASSIGN_OR_RETURN(auto sub_col, struct_col->field_column(type_desc.field_names[i]));
@@ -693,9 +692,8 @@ Status LevelBuilder::_write_variant_column_chunk(const LevelBuilderContext& ctx,
     auto rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
 
-    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, rep_levels,
-                                    ctx._max_def_level + node->is_optional(), ctx._max_rep_level,
-                                    ctx._repeated_ancestor_def_level);
+    LevelBuilderContext derived_ctx(ctx._num_levels, def_levels, rep_levels, ctx._max_def_level + node->is_optional(),
+                                    ctx._max_rep_level, ctx._repeated_ancestor_def_level);
 
     int metadata_index = -1;
     int value_index = -1;
