@@ -1,0 +1,31 @@
+-- name: test_null_safe_join_runtime_filter_pushdown
+CREATE TABLE `t_probe` (
+  `id` int NOT NULL,
+  `k` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE `t_build` (
+  `id` int NOT NULL,
+  `k` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t_probe
+select generate_series, if(generate_series % 100 = 0, NULL, generate_series)
+from TABLE(generate_series(1, 200000));
+
+insert into t_build values (1, NULL);
+
+-- The build key is NULL, so the null-safe join's runtime filter matches the probe's NULL keys and
+-- is pushed into the scan that also carries `p.id < 1000`. Only ids 100, 200 .. 900 qualify.
+select count(*) from t_build b join t_probe p on b.k <=> p.k where p.id < 1000;
+
+select max(p.id) from t_build b join t_probe p on b.k <=> p.k where p.id < 1000;
+
+drop table t_probe force;
+drop table t_build force;

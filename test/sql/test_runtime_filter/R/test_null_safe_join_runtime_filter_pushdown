@@ -1,0 +1,41 @@
+-- name: test_null_safe_join_runtime_filter_pushdown
+CREATE TABLE `t_probe` (
+  `id` int NOT NULL,
+  `k` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `t_build` (
+  `id` int NOT NULL,
+  `k` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_probe
+select generate_series, if(generate_series % 100 = 0, NULL, generate_series)
+from TABLE(generate_series(1, 200000));
+-- result:
+-- !result
+insert into t_build values (1, NULL);
+-- result:
+-- !result
+select count(*) from t_build b join t_probe p on b.k <=> p.k where p.id < 1000;
+-- result:
+9
+-- !result
+select max(p.id) from t_build b join t_probe p on b.k <=> p.k where p.id < 1000;
+-- result:
+900
+-- !result
+drop table t_probe force;
+-- result:
+-- !result
+drop table t_build force;
+-- result:
+-- !result

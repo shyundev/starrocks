@@ -56,6 +56,8 @@ protected:
     // (ScanConjunctsManager::get_runtime_filter_predicates news them per call), so this
     // mutable state is not shared between concurrent readers.
     RuntimeFilter::RunningContext _running_ctx;
+    // Copy of the incoming selection for [from, to), zero-based, kept while a filter with nulls overwrites it.
+    std::vector<uint8_t> _selection_before_filter;
 };
 
 class DictColumnRuntimeFilterPredicate : public RuntimeFilterPredicate {
