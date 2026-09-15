@@ -140,6 +140,28 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
+    public void testSkewJoinWithNullSafeEqual() throws Exception {
+        // salting moves the NULL keys of the skew side to random buckets, so no rewrite here
+        String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on v1 <=> v4 ";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 1: v1 <=> 4: v4");
+        PlanTestBase.assertNotContains(sqlPlan, "rand_col");
+
+        sql = "select v2, v5 from t0 left join[skew|t0.v1(1,2)] t1 on v1 <=> v4 ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 1: v1 <=> 4: v4");
+        PlanTestBase.assertNotContains(sqlPlan, "rand_col");
+    }
+
+    @Test
+    public void testSkewJoinWithNullSafeEqualByStats() throws Exception {
+        String sql = "select * from test.customer join test.part on c_mktsegment <=> p_name ";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 7: C_MKTSEGMENT <=> 11: P_NAME");
+        PlanTestBase.assertNotContains(sqlPlan, "rand_col");
+    }
+
+    @Test
     public void testSkewJoinWithException1() {
         String sql = "select v2, v5 from t0 right join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
         Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));

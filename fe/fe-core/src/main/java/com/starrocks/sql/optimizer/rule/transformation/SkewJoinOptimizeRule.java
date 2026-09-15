@@ -141,11 +141,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         }
 
         // respect the join hint
-        if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
-            return true;
-        }
-
-        if (!context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
+        boolean skewJoinHinted = joinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW);
+        if (!skewJoinHinted && !context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
             return false;
         }
 
@@ -155,6 +152,17 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         List<BinaryPredicateOperator> equalConjs = JoinHelper.
                 getEqualsPredicate(leftOutputColumns, rightOutputColumns,
                         Utils.extractConjuncts(joinOperator.getOnPredicate()));
+
+        // The salt sends the NULL keys of the skew side to random buckets while the other side keeps
+        // them at bucket 0, so salting a null-safe equal join loses the NULL keys it has to match.
+        if (equalConjs.stream().anyMatch(equalConj -> !equalConj.getBinaryType().isEqual())) {
+            return false;
+        }
+
+        if (skewJoinHinted) {
+            return true;
+        }
+
         if (equalConjs.isEmpty()) {
             return false;
         }
