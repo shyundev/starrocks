@@ -107,6 +107,7 @@ import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
+import com.starrocks.common.proc.ProcUtils;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
@@ -2279,8 +2280,9 @@ public class ShowExecutor {
                     }
                     tabletInfos.sort(comparator);
 
-                    if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
-                        tabletInfos = tabletInfos.subList((int) statement.getOffset(), (int) sizeLimit);
+                    if (statement.hasLimit()) {
+                        tabletInfos = ProcUtils.applyLimit(tabletInfos,
+                                new LimitElement(statement.getOffset(), statement.getLimit()));
                     }
 
                     for (List<Comparable> tabletInfo : tabletInfos) {

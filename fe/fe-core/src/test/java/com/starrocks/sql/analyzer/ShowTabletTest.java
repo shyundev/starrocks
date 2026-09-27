@@ -15,8 +15,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -57,4 +64,20 @@ public class ShowTabletTest {
         analyzeFail("SHOW TABLET FROM example_db.table_name where IsConsistent=\"haha\";");
     }
 
+    @Test
+    public void testLimitOffset() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.show_tablet_paging (k int) " +
+                "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 5 PROPERTIES ('replication_num' = '1')");
+        Assertions.assertEquals(5, showTablet("SHOW TABLET FROM test.show_tablet_paging").size());
+        Assertions.assertEquals(2, showTablet("SHOW TABLET FROM test.show_tablet_paging LIMIT 2, 2").size());
+        // offset + limit runs past the last tablet
+        Assertions.assertEquals(3, showTablet("SHOW TABLET FROM test.show_tablet_paging LIMIT 2, 10").size());
+        Assertions.assertEquals(0, showTablet("SHOW TABLET FROM test.show_tablet_paging LIMIT 10, 2").size());
+    }
+
+    private static List<List<String>> showTablet(String sql) throws Exception {
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+        ShowTabletStmt stmt = (ShowTabletStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        return ShowExecutor.execute(stmt, ctx).getResultRows();
+    }
 }
