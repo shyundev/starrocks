@@ -206,8 +206,11 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 .setAggColumnIdToColumns(aggColumnIdToColumns)
                 .build();
 
-        LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
-                agg.getType(), agg.getGroupingKeys(), newAggCalls);
+        // Keep the HAVING predicate, limit and projection of the aggregation being replaced.
+        LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator.Builder()
+                .withOperator(agg)
+                .setAggregations(newAggCalls)
+                .build();
         // all used columns from aggCalls are from newMetaScan, we can remove the old project directly.
         return Lists.newArrayList(OptExpression.create(newAggOperator, OptExpression.create(newMetaScan)));
     }

@@ -543,6 +543,20 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testMetaAggregateKeepsHaving() throws Exception {
+        String sql = "select min(v1) from t0 [_META_] having min(v1) > 100";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                "  |  output: min(4: min)\n" +
+                "  |  group by: \n" +
+                "  |  having: 4: min > 100");
+
+        sql = "select count(v1) from t0 [_META_] having count(v1) > 100";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "having: 4: count > 100");
+    }
+
+    @Test
     public void testPruneCTE() throws Exception {
         String sql = "select \n"
                 + "*\n"
