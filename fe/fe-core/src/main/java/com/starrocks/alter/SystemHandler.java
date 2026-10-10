@@ -121,6 +121,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddFollowerClause(AddFollowerClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                SystemInfoService.checkNodeBelongsToCluster(clause.getHost());
                 GlobalStateMgr.getCurrentState().getNodeMgr()
                         .addFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
             });
@@ -140,6 +141,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddObserverClause(AddObserverClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                SystemInfoService.checkNodeBelongsToCluster(clause.getHost());
                 GlobalStateMgr.getCurrentState().getNodeMgr()
                         .addFrontend(FrontendNodeType.OBSERVER, clause.getHost(), clause.getPort());
             });

@@ -79,6 +79,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -114,12 +115,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class SystemInfoService implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
     public static final String DEFAULT_CLUSTER = "default_cluster";
+    // <cluster>-fe-<n>.<cluster>-fe-search.<namespace>.svc.<domain>
+    private static final Pattern OPERATOR_FE_HOST = Pattern.compile("([^.]+)-fe-\\d+\\.\\1-fe-search\\.(.+)");
 
     @SerializedName(value = "be")
     protected volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
@@ -146,6 +151,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throws DdlException {
         for (HostPort hostPort : addComputeNodeClause.getHostPortPairs()) {
             checkSameNodeExist(hostPort.getHost(), hostPort.getPort());
+            checkNodeBelongsToCluster(hostPort.getHost());
         }
 
         for (HostPort hostPort : addComputeNodeClause.getHostPortPairs()) {
@@ -250,6 +256,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public void addBackends(AddBackendClause addBackendClause) throws DdlException {
         for (HostPort hostPort : addBackendClause.getHostPortPairs()) {
             checkSameNodeExist(hostPort.getHost(), hostPort.getPort());
+            checkNodeBelongsToCluster(hostPort.getHost());
         }
 
         for (HostPort hostPort : addBackendClause.getHostPortPairs()) {
@@ -266,6 +273,25 @@ public class SystemInfoService implements GsonPostProcessable {
 
         if (getComputeNodeWithHeartbeatPort(host, heartPort) != null) {
             throw new DdlException("Compute node already exists with same host " + host + " and port " + heartPort);
+        }
+    }
+
+    // <cluster>-fe-service can still list the IP of a deleted FE pod that another cluster's FE now uses, and a node
+    // that joins through the service then sends its ADD to the other cluster. Reject hosts outside this FE's cluster.
+    public static void checkNodeBelongsToCluster(String host) throws DdlException {
+        if (!FrontendOptions.isUseFqdn() || InetAddressValidator.getInstance().isValid(host)) {
+            return;
+        }
+        String feHost = FrontendOptions.getLocalHostAddress();
+        Matcher fe = OPERATOR_FE_HOST.matcher(feHost);
+        if (!fe.matches()) {
+            return;
+        }
+        String cluster = Pattern.quote(fe.group(1));
+        String domain = Pattern.quote(fe.group(2));
+        if (!host.matches(cluster + "-(fe|fe-observer|cn|be)-\\d+\\." + cluster + "-\\1-search\\." + domain)
+                && !host.matches("[^.]+\\.[^.]+-warehouse-cn-search\\." + domain)) {
+            throw new DdlException("Host " + host + " does not belong to this cluster (FE " + feHost + ")");
         }
     }
 

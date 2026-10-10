@@ -25,18 +25,24 @@ import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.TransferLeaderClause;
@@ -52,6 +58,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -361,5 +368,52 @@ public class SystemHandlerTest {
             // The node is still there not removed
             Assertions.assertNotNull(node);
         }
+    }
+
+    @Test
+    public void testAddFrontendOfOperatorCluster() throws Exception {
+        new MockUp<FrontendOptions>() {
+            @Mock
+            public String getLocalHostAddress() {
+                return "c06-fe-0.c06-fe-search.cnx-06.svc.cluster.local";
+            }
+        };
+        List<String> added = new ArrayList<>();
+        new MockUp<NodeMgr>() {
+            @Mock
+            public void addFrontend(FrontendNodeType role, String host, int editLogPort) {
+                added.add(role + " " + host);
+            }
+        };
+        Field useFqdn = FrontendOptions.class.getDeclaredField("useFqdn");
+        useFqdn.setAccessible(true);
+        useFqdn.set(null, true);
+        try {
+            String other = "c07-fe-0.c07-fe-search.cnx-07.svc.cluster.local";
+            for (AlterClause clause : List.of(followerClause(other), observerClause(other))) {
+                RuntimeException e = assertThrows(RuntimeException.class,
+                        () -> systemHandler.process(List.of(clause), null, null));
+                assertThat(e.getMessage(), containsString("does not belong to this cluster"));
+            }
+            String own = "c06-fe-1.c06-fe-search.cnx-06.svc.cluster.local";
+            String ownObserver = "c06-fe-observer-0.c06-fe-observer-search.cnx-06.svc.cluster.local";
+            systemHandler.process(List.of(followerClause(own)), null, null);
+            systemHandler.process(List.of(observerClause(ownObserver)), null, null);
+            Assertions.assertEquals(List.of("FOLLOWER " + own, "OBSERVER " + ownObserver), added);
+        } finally {
+            useFqdn.set(null, false);
+        }
+    }
+
+    private static AddFollowerClause followerClause(String host) {
+        AddFollowerClause clause = new AddFollowerClause(host + ":9010");
+        clause.setHostPortObj(new HostPort(host, 9010));
+        return clause;
+    }
+
+    private static AddObserverClause observerClause(String host) {
+        AddObserverClause clause = new AddObserverClause(host + ":9010");
+        clause.setHostPortObj(new HostPort(host, 9010));
+        return clause;
     }
 }

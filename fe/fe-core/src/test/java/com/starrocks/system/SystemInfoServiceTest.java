@@ -33,7 +33,11 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
@@ -49,6 +53,7 @@ import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -59,8 +64,11 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SystemInfoServiceTest {
+    private static final String OPERATOR_FE = "c06-fe-0.c06-fe-search.cnx-06.svc.cluster.local";
 
     SystemInfoService service;
+
+    private final List<String> addedNodes = new ArrayList<>();
 
     @Mocked
     GlobalStateMgr globalStateMgr;
@@ -809,5 +817,83 @@ public class SystemInfoServiceTest {
             // throw not support exception
             service.modifyBackendHost(clause);
         });
+    }
+
+    private List<String> addNodesFromFe(String feHost, boolean backend, String... hosts) throws DdlException {
+        new MockUp<FrontendOptions>() {
+            @Mock
+            public String getLocalHostAddress() {
+                return feHost;
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public void addComputeNodeToWarehouse(ComputeNode computeNode, String warehouseName, String cnGroupName) {
+                addedNodes.add(computeNode.getHost());
+            }
+        };
+        List<HostPort> hostPorts = Arrays.stream(hosts).map(h -> new HostPort(h, 9050)).collect(Collectors.toList());
+        if (backend) {
+            AddBackendClause clause = new AddBackendClause(List.of(), "default_warehouse");
+            clause.setHostPortPairs(hostPorts);
+            service.addBackends(clause);
+        } else {
+            AddComputeNodeClause clause = new AddComputeNodeClause(List.of(), "default_warehouse", "", NodePosition.ZERO);
+            clause.getHostPortPairs().addAll(hostPorts);
+            service.addComputeNodes(clause);
+        }
+        return addedNodes;
+    }
+
+    private void assertRejected(String feHost, boolean backend, String... hosts) {
+        DdlException e = assertThrows(DdlException.class, () -> addNodesFromFe(feHost, backend, hosts));
+        Assertions.assertTrue(e.getMessage().contains("does not belong to this cluster"), e.getMessage());
+        Assertions.assertTrue(addedNodes.isEmpty());
+    }
+
+    @Test
+    public void testAddOwnComputeNode() throws Exception {
+        String cn = "c06-cn-0.c06-cn-search.cnx-06.svc.cluster.local";
+        Assertions.assertEquals(List.of(cn), addNodesFromFe(OPERATOR_FE, false, cn));
+    }
+
+    @Test
+    public void testRejectComputeNodeOfClusterInOtherNamespace() {
+        assertRejected(OPERATOR_FE, false,
+                "c06-cn-1.c06-cn-search.cnx-06.svc.cluster.local",
+                "c07-cn-0.c07-cn-search.cnx-07.svc.cluster.local");
+    }
+
+    @Test
+    public void testRejectComputeNodeOfClusterInSameNamespace() {
+        assertRejected(OPERATOR_FE, false, "c07-cn-0.c07-cn-search.cnx-06.svc.cluster.local");
+    }
+
+    @Test
+    public void testAddWarehouseComputeNodeInSameNamespace() throws Exception {
+        String cn = "wh1-warehouse-cn-0.wh1-warehouse-cn-search.cnx-06.svc.cluster.local";
+        Assertions.assertEquals(List.of(cn), addNodesFromFe(OPERATOR_FE, false, cn));
+    }
+
+    @Test
+    public void testAddOwnBackend() throws Exception {
+        String be = "c06-be-0.c06-be-search.cnx-06.svc.cluster.local";
+        Assertions.assertEquals(List.of(be), addNodesFromFe(OPERATOR_FE, true, be));
+    }
+
+    @Test
+    public void testRejectBackendOfOtherCluster() {
+        assertRejected(OPERATOR_FE, true, "c07-be-0.c07-be-search.cnx-07.svc.cluster.local");
+    }
+
+    @Test
+    public void testAddIpHostFromOperatorFe() throws Exception {
+        Assertions.assertEquals(List.of("10.0.0.7"), addNodesFromFe(OPERATOR_FE, false, "10.0.0.7"));
+    }
+
+    @Test
+    public void testAddAnyHostFromNonOperatorFe() throws Exception {
+        String cn = "c07-cn-0.c07-cn-search.cnx-07.svc.cluster.local";
+        Assertions.assertEquals(List.of(cn), addNodesFromFe("fe-0.example.com", false, cn));
     }
 }
