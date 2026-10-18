@@ -1390,4 +1390,36 @@ public class PartitionPruneTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
 
     }
+
+    @Test
+    public void testMinMaxConstantWithNullValueDayPartition() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_expr_range_minmax_null` (\n" +
+                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"0000-01-01\") END (\"0000-01-02\") EVERY (INTERVAL 1 DAY),\n" +
+                " START (\"2025-04-29\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx().executeSql("insert into t4_expr_range_minmax_null values(NULL, 1), ('2025-04-29', 2)");
+        FeConstants.runningUnitTest = false;
+        // NULL rows are stored in the partition that starts at the minimum date, so its lower bound is not MIN(dt)
+        starRocksAssert.query("select min(dt) from t4_expr_range_minmax_null")
+                .explainContains("partitions=2/2");
+        starRocksAssert.query("select max(dt) from t4_expr_range_minmax_null")
+                .explainContains("     constant exprs: \n         '2025-04-29'\n");
+        starRocksAssert.getTable("test", "t4_expr_range_minmax_null")
+                .getPartition("p20250429").getDefaultPhysicalPartition().updateVisibleVersion(1);
+        // only the NULL rows are left, so MAX(dt) must be read from the data as well
+        starRocksAssert.query("select max(dt) from t4_expr_range_minmax_null")
+                .explainContains("partitions=1/2");
+        starRocksAssert.dropTable("t4_expr_range_minmax_null");
+        FeConstants.runningUnitTest = true;
+    }
 }

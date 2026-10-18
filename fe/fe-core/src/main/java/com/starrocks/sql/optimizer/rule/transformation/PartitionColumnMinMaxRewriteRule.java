@@ -323,6 +323,8 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         PartitionInfo partitionInfo = table.getPartitionInfo();
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
+        // NULL rows are stored in the MIN_VALUE partition, so its lower bound is not a value the data must hold
+        Set<Long> nullPartitions = partitionInfo.getNullValuePartitions();
 
         List<ScalarOperator> valueRow = Lists.newArrayList();
         List<ColumnRefOperator> columns = Lists.newArrayList();
@@ -330,7 +332,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             if (isMin(entry.getValue())) {
                 List<Long> sorted = partitionInfo.getSortedPartitions(true);
                 sorted.retainAll(nonEmptyPartitionIds);
-                if (CollectionUtils.isEmpty(sorted)) {
+                if (CollectionUtils.isEmpty(sorted) || nullPartitions.contains(sorted.get(0))) {
                     return null;
                 }
                 valueRow.add(minMaxFunction.first.apply(sorted.get(0), partitionInfo));
@@ -338,7 +340,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             } else if (isMax(entry.getValue())) {
                 List<Long> sorted = partitionInfo.getSortedPartitions(false);
                 sorted.retainAll(nonEmptyPartitionIds);
-                if (CollectionUtils.isEmpty(sorted)) {
+                if (CollectionUtils.isEmpty(sorted) || nullPartitions.contains(sorted.get(0))) {
                     return null;
                 }
                 valueRow.add(minMaxFunction.second.apply(sorted.get(0), partitionInfo));
