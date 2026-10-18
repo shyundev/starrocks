@@ -83,11 +83,6 @@ public class ArrowFlightSqlService {
             flightServer.start();
             running = true;
             LOG.info("[ARROW] Arrow Flight SQL server start [location={}] [feEndpoint={}].", location, feEndpoint);
-            flightServer.awaitTermination();
-        } catch (InterruptedException e) {
-            LOG.warn("[ARROW] Interrupted while stopping Arrow Flight SQL server", e);
-            Thread.currentThread().interrupt();
-            System.exit(-1);
         } catch (Exception e) {
             LOG.error("[ARROW] Failed to start Arrow Flight SQL server on {}:{}. Its port might be occupied. You can " +
                             "modify `arrow_flight_port` in `fe.conf` to an unused port or set it to -1 to disable it.",
