@@ -1263,6 +1263,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            partitionKeyAscHint.ifPresent(aBoolean -> msg.lake_scan_node.setPartition_order_hint(aBoolean));
             msg.lake_scan_node.setSchema_key(getSchemaKey());
 
             msg.lake_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
