@@ -3179,7 +3179,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // After finalAnalyze, so a statement it already rejects keeps its own message.
-        checkBitmapIndexesForTypeChange(olapTable, newIndexes, indexMetaIdToSchema);
+        checkIndexesForTypeChange(olapTable, newIndexes, indexMetaIdToSchema);
         checkBloomFilterColumnsForTypeChange(olapTable, schemaChangeData.getBloomFilterColumns(),
                 indexMetaIdToSchema);
 
@@ -3243,20 +3243,20 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    // A rewrite carries every BITMAP index on a column over to the column's new type, and the BE can only
-    // write a bitmap dictionary for the types CREATE INDEX accepts. Check the statement's final index set
+    // A rewrite carries every BITMAP and NGRAMBF index on a column over to the column's new type, and the BE can
+    // only build them for the types CREATE INDEX accepts. Check the statement's final index set
     // against the final types, so an index added or dropped in the same statement is accounted for. Every
     // materialized index is checked, not just the base one: an index may cover a column that only a rollup
     // (synchronous MV) carries. Only columns that are new to a staged schema or whose type changes there are
     // checked: a keyness change alone keeps the type, and an untouched column keeps whatever index it already has.
-    private static void checkBitmapIndexesForTypeChange(OlapTable table, List<Index> indexes,
-                                                        Map<Long, ? extends List<Column>> indexMetaIdToSchema)
+    private static void checkIndexesForTypeChange(OlapTable table, List<Index> indexes,
+                                                  Map<Long, ? extends List<Column>> indexMetaIdToSchema)
             throws DdlException {
         for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
             Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
             Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
             for (Index index : indexes) {
-                if (index.getIndexType() != IndexType.BITMAP) {
+                if (index.getIndexType() != IndexType.BITMAP && index.getIndexType() != IndexType.NGRAMBF) {
                     continue;
                 }
                 for (ColumnId columnId : index.getColumns()) {
@@ -3268,7 +3268,11 @@ public class SchemaChangeHandler extends AlterHandler {
                     String columnName = oldColumn != null ? oldColumn.getName()
                             : Column.removeNamePrefix(newColumn.getName());
                     try {
-                        IndexAnalyzer.checkBitmapColumnType(columnName, newColumn.getPrimitiveType());
+                        if (index.getIndexType() == IndexType.BITMAP) {
+                            IndexAnalyzer.checkBitmapColumnType(columnName, newColumn.getPrimitiveType());
+                        } else {
+                            IndexAnalyzer.checkNgramBloomFilterColumnType(columnName, newColumn.getType());
+                        }
                     } catch (SemanticException e) {
                         throw new DdlException(e.getDetailMsg());
                     }

@@ -530,15 +530,17 @@ public class IndexAnalyzer {
                 k -> NgramBfIndexParamsKey.CASE_SENSITIVE.getIndexParamItem().getDefaultValue());
     }
 
-    public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)
-            throws SemanticException {
-        Type type = column.getType();
-
+    public static void checkNgramBloomFilterColumnType(String columnName, Type type) {
         // tinyint/float/double columns don't support
         if (!type.isStringType()) {
             throw new SemanticException(String.format("Invalid ngram bloom filter column '%s': unsupported type %s",
-                    column.getName(), type));
+                    columnName, type));
         }
+    }
+
+    public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)
+            throws SemanticException {
+        checkNgramBloomFilterColumnType(column.getName(), column.getType());
 
         // Only support create Ngram bloom filter on DUPLICATE/PRIMARY table or key columns of UNIQUE/AGGREGATE table.
         if (!(column.isKey() || keysType == KeysType.PRIMARY_KEYS ||

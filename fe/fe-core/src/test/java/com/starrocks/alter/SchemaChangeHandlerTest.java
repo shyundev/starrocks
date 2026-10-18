@@ -1479,6 +1479,33 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Assertions.assertEquals(16, ((ScalarType) table.getColumn("x").getType()).getLength());
     }
 
+    @Test
+    public void testModifyNgramBloomFilterColumnToNonStringTypeIsRejected() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        for (boolean fast : new boolean[] {false, true}) {
+            String name = "ngram_bf_reject_" + (fast ? "fast" : "slow");
+            createTable("CREATE TABLE test." + name + " (k BIGINT NOT NULL, x VARCHAR(16), y VARCHAR(16), "
+                    + "INDEX ix_x (x) USING NGRAMBF ('gram_num'='4', 'bloom_filter_fpp'='0.05')) "
+                    + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                    + "PROPERTIES ('replication_num'='1', 'fast_schema_evolution'='" + fast + "')");
+            OlapTable table = (OlapTable) db.getTable(name);
+            for (String clauses : new String[] {"MODIFY COLUMN x BIGINT",
+                    "ADD INDEX ix_y (y) USING NGRAMBF ('gram_num'='4', 'bloom_filter_fpp'='0.05'), "
+                            + "MODIFY COLUMN y BIGINT"}) {
+                AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt("ALTER TABLE test." + name + " " + clauses);
+                DdlException e = Assertions.assertThrows(DdlException.class,
+                        () -> handler.process(stmt.getAlterClauseList(), db, table), clauses);
+                String column = clauses.startsWith("MODIFY") ? "x" : "y";
+                Assertions.assertEquals("Invalid ngram bloom filter column '" + column + "': unsupported type BIGINT",
+                        e.getMessage());
+                Assertions.assertEquals(PrimitiveType.VARCHAR, table.getColumn(column).getPrimitiveType());
+                Assertions.assertFalse(hasAlterJobOf(handler, table), clauses);
+                Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+            }
+        }
+    }
+
     private void assertBitmapModifyRejected(OlapTable table, String alterClauses, String columnName) throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
