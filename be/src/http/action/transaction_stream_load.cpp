@@ -415,6 +415,29 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     if (!http_req->header(HTTP_ROW_DELIMITER).empty()) {
         request.__set_rowDelimiter(http_req->header(HTTP_ROW_DELIMITER));
     }
+    if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
+        int64_t skip_header = 0;
+        RETURN_IF_ERROR(parse_int64_param(HTTP_SKIP_HEADER, http_req->header(HTTP_SKIP_HEADER), &skip_header));
+        if (skip_header < 0) {
+            return Status::InvalidArgument("skip_header must be equal or greater than 0");
+        }
+        request.__set_skipHeader(skip_header);
+    }
+    if (!http_req->header(HTTP_TRIM_SPACE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
+            request.__set_trimSpace(false);
+        } else if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "true")) {
+            request.__set_trimSpace(true);
+        } else {
+            return Status::InvalidArgument("Invalid trim space format. Must be bool type");
+        }
+    }
+    if (!http_req->header(HTTP_ENCLOSE).empty()) {
+        request.__set_enclose(http_req->header(HTTP_ENCLOSE)[0]);
+    }
+    if (!http_req->header(HTTP_ESCAPE).empty()) {
+        request.__set_escape(http_req->header(HTTP_ESCAPE)[0]);
+    }
     if (!http_req->header(HTTP_PARTITIONS).empty()) {
         request.__set_partitions(http_req->header(HTTP_PARTITIONS));
         request.__set_isTempPartition(false);

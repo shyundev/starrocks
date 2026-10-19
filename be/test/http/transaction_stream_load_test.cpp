@@ -1337,6 +1337,58 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_partial_update_rejecte
     }
 }
 
+// The CSV headers the regular stream load endpoint reads must reach the plan request here too.
+TEST_F(TransactionStreamLoadActionTest, csv_headers_forwarded) {
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin_req(_evhttp_req);
+    begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin_req._headers.emplace(HTTP_LABEL_KEY, "csv_headers_forwarded");
+    begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin_req);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    bool captured = false;
+    TStreamLoadPutRequest captured_request;
+    SyncPoint::GetInstance()->SetCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout",
+                                          [&](void* arg) {
+                                              captured = true;
+                                              captured_request = *static_cast<TStreamLoadPutRequest*>(arg);
+                                          });
+
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_LABEL_KEY, "csv_headers_forwarded");
+    request._headers.emplace(HTTP_SKIP_HEADER, "1");
+    request._headers.emplace(HTTP_TRIM_SPACE, "TRUE");
+    request._headers.emplace(HTTP_ENCLOSE, "\"");
+    request._headers.emplace(HTTP_ESCAPE, "\\");
+    action.on_header(&request);
+    action.handle(&request);
+
+    ASSERT_TRUE(captured);
+    ASSERT_TRUE(captured_request.__isset.skipHeader);
+    EXPECT_EQ(1, captured_request.skipHeader);
+    ASSERT_TRUE(captured_request.__isset.trimSpace);
+    EXPECT_TRUE(captured_request.trimSpace);
+    ASSERT_TRUE(captured_request.__isset.enclose);
+    EXPECT_EQ('"', captured_request.enclose);
+    ASSERT_TRUE(captured_request.__isset.escape);
+    EXPECT_EQ('\\', captured_request.escape);
+}
+
 // channel_id is parsed before the transaction context is even looked up, so a
 // malformed value used to throw out of the libevent callback with nothing above
 // it to catch the exception.
@@ -1409,6 +1461,8 @@ TEST_F(TransactionStreamLoadActionTest, on_header_numeric_headers_rejected) {
             {HTTP_LOAD_DOP, "not-a-number", "The value must be an integer"},
             // load_dop is an i32 on the wire; a wider value used to be truncated.
             {HTTP_LOAD_DOP, "2147483648", "must be between -2147483648 and 2147483647"},
+            {HTTP_SKIP_HEADER, "not-a-number", "Invalid parameter skip_header"},
+            {HTTP_SKIP_HEADER, "-1", "skip_header must be equal or greater than 0"},
     };
 
     for (const auto& tc : test_cases) {
