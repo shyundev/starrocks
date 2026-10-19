@@ -740,4 +740,77 @@ TEST_F(VectorizedArithmeticExprTest, bitShiftPropagatesChildError) {
     ASSERT_TRUE(result.status().is_internal_error());
 }
 
+// A zero operand does not absorb NaN or infinity: under IEEE 754, 0 * NaN, 0 * inf and 0 / NaN are NaN.
+// A product or quotient that is zero of either sign still comes back as +0.
+template <LogicalType Type>
+static void verify_float_zero_operand(TExprNode expr_node, TPrimitiveType::type thrift_type,
+                                      RuntimeState* runtime_state) {
+    using CppType = RunTimeCppType<Type>;
+    const CppType nan = std::numeric_limits<CppType>::quiet_NaN();
+    const CppType inf = std::numeric_limits<CppType>::infinity();
+    auto make_column = [](const std::vector<CppType>& values) {
+        auto column = RunTimeColumnType<Type>::create();
+        for (CppType value : values) {
+            column->append(value);
+        }
+        return column;
+    };
+    expr_node.child_type = thrift_type;
+    expr_node.type = gen_type_desc(thrift_type);
+
+    {
+        expr_node.opcode = TExprOpcode::MULTIPLY;
+        std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
+        MockColumnExpr lhs(expr_node, make_column({0, 0, 0, nan, inf, 2, 0, CppType(-0.0)}));
+        MockColumnExpr rhs(expr_node, make_column({nan, inf, -inf, 0, 0, nan, -5, 5}));
+        expr->_children.push_back(&lhs);
+        expr->_children.push_back(&rhs);
+
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), runtime_state, [](ColumnPtr const& ptr) {
+            const auto& data = ColumnHelper::get_data_column_by_type<Type>(ptr)->immutable_data();
+            ASSERT_EQ(8, data.size());
+            for (int i = 0; i < 6; ++i) {
+                ASSERT_TRUE(std::isnan(data[i])) << i << ": " << data[i];
+            }
+            for (int i = 6; i < 8; ++i) {
+                ASSERT_EQ(0, data[i]) << i;
+                ASSERT_FALSE(std::signbit(data[i])) << i;
+            }
+        });
+    }
+
+    {
+        expr_node.opcode = TExprOpcode::DIVIDE;
+        expr_node.is_nullable = true;
+        std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
+        expr_node.is_nullable = false;
+        MockColumnExpr lhs(expr_node, make_column({0, 2, 0, 0, 0, 0}));
+        MockColumnExpr rhs(expr_node, make_column({nan, nan, inf, -inf, -5, 0}));
+        expr->_children.push_back(&lhs);
+        expr->_children.push_back(&rhs);
+
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), runtime_state, [](ColumnPtr const& ptr) {
+            const auto& data = ColumnHelper::get_data_column_by_type<Type>(ptr)->immutable_data();
+            ASSERT_EQ(6, data.size());
+            for (int i = 0; i < 2; ++i) {
+                ASSERT_FALSE(ptr->is_null(i)) << i;
+                ASSERT_TRUE(std::isnan(data[i])) << i << ": " << data[i];
+            }
+            for (int i = 2; i < 5; ++i) {
+                ASSERT_FALSE(ptr->is_null(i)) << i;
+                ASSERT_EQ(0, data[i]) << i;
+                ASSERT_FALSE(std::signbit(data[i])) << i;
+            }
+            ASSERT_TRUE(ptr->is_null(5));
+        });
+    }
+}
+
+TEST_F(VectorizedArithmeticExprTest, floatZeroOperandKeepsNaN) {
+    verify_float_zero_operand<TYPE_DOUBLE>(expr_node, TPrimitiveType::DOUBLE, &runtime_state);
+    verify_float_zero_operand<TYPE_FLOAT>(expr_node, TPrimitiveType::FLOAT, &runtime_state);
+}
+
 } // namespace starrocks

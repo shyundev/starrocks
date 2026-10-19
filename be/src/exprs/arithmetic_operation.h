@@ -134,17 +134,21 @@ struct ArithmeticBinaryOperator {
         } else if constexpr (is_mul_op<Op>) {
             // avoid 0 mul a negative num, make result -0
             if constexpr (std::is_floating_point<LType>::value) {
-                if (UNLIKELY(l == LType(0) || r == RType(0))) {
+                auto result = l * r;
+                if (UNLIKELY(result == 0)) {
                     return LType(0);
                 }
+                return result;
             }
             return l * r;
         } else if constexpr (is_div_op<Op>) {
             // avoid 0 div a negative num, make result -0
             if constexpr (std::is_floating_point<LType>::value) {
-                if (UNLIKELY(l == 0)) {
+                auto result = l / (r + (r == 0));
+                if (UNLIKELY(result == 0)) {
                     return 0;
                 }
+                return result;
             }
             if constexpr (may_cause_fpe<ResultType>) {
                 if (UNLIKELY(check_fpe_of_min_div_by_minus_one(l, r))) {
@@ -241,12 +245,11 @@ struct ArithmeticBinaryOperator {
                 // return 0 when div by 0.
                 // adjusted_r = r == 0.0 ? r + 1.0 : r;
                 r_is_zero = b.CreateFCmpOEQ(r, llvm::ConstantFP::get(r->getType(), 0));
-                auto* l_is_zero = b.CreateFCmpOEQ(l, llvm::ConstantFP::get(r->getType(), 0));
                 auto* sum = b.CreateFAdd(r, llvm::ConstantFP::get(r->getType(), 1));
                 auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
                 result.value = b.CreateFDiv(l, adjusted_r);
-                result.value =
-                        b.CreateSelect(l_is_zero, llvm::ConstantFP::get(r->getType(), 0), b.CreateFDiv(l, adjusted_r));
+                auto* result_is_zero = b.CreateFCmpOEQ(result.value, llvm::ConstantFP::get(r->getType(), 0));
+                result.value = b.CreateSelect(result_is_zero, llvm::ConstantFP::get(r->getType(), 0), result.value);
             } else {
                 // TODO(Yueyang): avoid 0 div a negative num, make result -0
                 // adjusted_r = r == 0 ? r + 1 : r;
